@@ -1,0 +1,173 @@
+@import "tailwindcss";
+
+:root {
+  --background: #eef1f6;
+  --surface: #ffffff;
+  --surface-2: #f5f7fb;
+  --foreground: #0b1220;
+  --muted: #5b6472;
+
+  --primary: #0a5cff;
+  --primary-dim: #e8f0ff;
+  --primary-deep: #0037c7;
+  --primary-glow: #57a1ff;
+
+  --silver: #dfe4ec;
+  --silver-deep: #c4ccd9;
+
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+
+  --black-access: #171717;
+  --black-access-glow: #7c3aed;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-dim: var(--primary-dim);
+  --color-primary-deep: var(--primary-deep);
+  --color-primary-glow: var(--primary-glow);
+  --color-silver: var(--silver);
+  --color-silver-deep: var(--silver-deep);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-black-access: var(--black-access);
+  --color-black-access-glow: var(--black-access-glow);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+@layer utilities {
+  .bg-mesh {
+    background-image:
+      radial-gradient(60rem 40rem at 90% -10%, rgba(10, 92, 255, 0.10), transparent 60%),
+      radial-gradient(50rem 35rem at -10% 20%, rgba(87, 161, 255, 0.12), transparent 55%);
+  }
+
+  .shell {
+    background: rgba(196, 204, 217, 0.35);
+    border: 1px solid rgba(11, 18, 32, 0.06);
+  }
+
+  .core {
+    background: var(--surface);
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.6);
+  }
+
+  .diffused {
+    box-shadow: 0 1px 2px rgba(11, 18, 32, 0.04), 0 20px 40px -12px rgba(11, 18, 32, 0.10);
+  }
+
+  .diffused-lg {
+    box-shadow: 0 1px 2px rgba(11, 18, 32, 0.04), 0 30px 60px -15px rgba(10, 92, 255, 0.16);
+  }
+
+  .noise::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    pointer-events: none;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .ease-spring {
+    transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.99);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  @keyframes fade-in-fast {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .animate-fade-in-fast {
+    animation: fade-in-fast 0.22s ease-out;
+  }
+
+  @keyframes slide-in-right {
+    from {
+      opacity: 0;
+      transform: translateX(24px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .animate-slide-in-right {
+    animation: slide-in-right 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  /* Fondo de marca: azul tecno profundo con destellos diagonales. */
+  .bg-brand {
+    background-color: #050b1f;
+    background-image:
+      linear-gradient(115deg, transparent 42%, rgba(87, 161, 255, 0.55) 43%, transparent 44%),
+      linear-gradient(115deg, transparent 68%, rgba(87, 161, 255, 0.35) 69%, transparent 70%),
+      radial-gradient(60rem 40rem at 15% 15%, rgba(10, 92, 255, 0.35), transparent 60%),
+      radial-gradient(50rem 45rem at 100% 100%, rgba(0, 30, 120, 0.65), transparent 55%),
+      linear-gradient(135deg, #04122f 0%, #0a2a6e 45%, #0a5cff 100%);
+  }
+
+  .brand-plate {
+    background: linear-gradient(135deg, #0a2a6e 0%, #0a5cff 100%);
+  }
+
+  /* Negro Synergy Black Access: negro profundo con brillo gris central,
+     mismo tratamiento que el resto de boletos. */
+  .black-plate {
+    background: linear-gradient(160deg, #000000 0%, #262626 45%, #4a4a4a 75%, #1a1a1a 100%);
+  }
+
+  /* Rojo Synergy General: mismo degradado del boleto oficial (rojo vino
+     profundo con brillo central). */
+  .general-plate {
+    background: linear-gradient(160deg, #1a0304 0%, #6e0c11 45%, #a11419 75%, #7a0d12 100%);
+  }
+
+  /* Dorado Synergy VIP: mismo tratamiento que el boleto General pero en
+     dorado profundo con brillo central. */
+  .vip-plate {
+    background: linear-gradient(160deg, #2a2005 0%, #8a6a0c 45%, #e0b020 75%, #a17d10 100%);
+  }
+}

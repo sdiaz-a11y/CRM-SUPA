@@ -1,0 +1,11 @@
+node_modules
+.next
+dev.log
+*.tsbuildinfo
+.env*.local
+
+# Datos reales de clientes (PII) — nunca al repo, el repo es público.
+data/db.json
+Atención y Seguimiento - Club Sinergético - Registro de atención.csv
+Atención y Seguimiento - Club Sinergético - DISPUTAS 2025.csv
+Atención y Seguimiento - Club Sinergético - DISPUTAS 2026.csv
