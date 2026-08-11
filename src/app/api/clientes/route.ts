@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   crearCliente,
   listarClientes,
+  marcarAccesoPlataforma,
   vincularKajabiContactId,
   type EstadoFiltro,
   type RegionFiltro,
@@ -47,25 +48,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Nombre y correo son obligatorios" }, { status: 400 });
   }
   try {
-    const cliente = await crearCliente({
+    let cliente = await crearCliente({
       nombre: body.nombre,
       email: body.email,
       telefono: body.telefono,
       pais: body.pais,
-      ciudad: body.ciudad,
-      notas: body.notas,
-      fechaInscripcion: body.fechaInscripcion,
+      evento: body.evento,
+      tipoMembresia: body.tipoMembresia,
+      etiqueta: body.etiqueta,
       autor: body.autor,
     });
 
     // El alta en Kajabi es un efecto secundario del alta en el CRM: si
     // Kajabi falla (fuera de línea, credenciales vencidas, etc.) el cliente
     // igual queda creado en el CRM y se avisa del problema, en vez de
-    // bloquear el flujo principal por la disponibilidad de un tercero.
+    // bloquear el flujo principal por la disponibilidad de un tercero. El
+    // "Sí" en Acceso a plataforma solo se escribe si Kajabi confirmó el
+    // otorgamiento — es la forma de verificar que sí se dio.
     let avisoKajabi: string | null = null;
     try {
       const kajabiContactId = await altaEnKajabi(cliente.nombre, cliente.email);
       await vincularKajabiContactId(cliente.id, kajabiContactId);
+      cliente = await marcarAccesoPlataforma(cliente.id, "Si");
     } catch (err) {
       avisoKajabi = err instanceof Error ? err.message : "No se pudo otorgar el acceso en Kajabi";
     }

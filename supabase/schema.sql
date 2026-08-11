@@ -80,3 +80,115 @@ alter table eventos_timeline enable row level security;
 -- Integración con Kajabi: id del contacto en Kajabi, para no tener que
 -- rebuscarlo por correo en cada alta/otorgamiento de oferta.
 alter table clientes add column if not exists kajabi_contact_id text;
+
+-- Clasificación propia del CRM (independiente de los tags de Kajabi),
+-- capturada opcionalmente al dar de alta un cliente desde el formulario.
+alter table clientes add column if not exists etiqueta text;
+
+-- Tags del cliente (distintos de "etiqueta"): clasificación libre que se
+-- asigna después, desde el panel del cliente — no en el alta. Un cliente
+-- puede tener varios.
+alter table clientes add column if not exists tags jsonb not null default '[]'::jsonb;
+
+-- Catálogos administrables desde "Biblioteca" (menú lateral): las listas de
+-- Eventos, Etiquetas y Tags que alimentan los desplegables con buscador de
+-- toda la app. Cualquiera puede agregar opciones nuevas ahí sin tocar código.
+create table if not exists catalogo_opciones (
+  id uuid primary key default gen_random_uuid(),
+  tipo text not null check (tipo in ('evento', 'etiqueta', 'tag')),
+  valor text not null,
+  creado_en timestamptz not null default now(),
+  unique (tipo, valor)
+);
+
+insert into catalogo_opciones (tipo, valor) values
+  ('evento', 'BOOTCAMP'),
+  ('evento', 'WMDL-MX'),
+  ('evento', 'WJS-MX'),
+  ('evento', 'USA-WMDL'),
+  ('evento', 'USA-WJS'),
+  ('evento', 'EPUS - DALLAS'),
+  ('evento', 'EPUS - AUSTIN'),
+  ('evento', 'EPUS - SAN ANTONIO'),
+  ('evento', 'EPUS - HOUSTON'),
+  ('evento', 'EPUS - TAMPA'),
+  ('evento', 'EPUS - ORLANDO'),
+  ('evento', 'EPUS - MIAMI'),
+  ('evento', 'EPUS - NEWARK'),
+  ('evento', 'EPUS - CHICAGO'),
+  ('evento', 'EPUS - BOSTON'),
+  ('evento', 'EPUS - PHILADELPHIA'),
+  ('evento', 'EPUS - SAN JOSE'),
+  ('evento', 'EPUS - L.A.'),
+  ('evento', 'EPUS - SAN DIEGO'),
+  ('evento', 'EPUS - PHOENIX'),
+  ('evento', 'EPUS - ATLANTA'),
+  ('evento', 'EPUS - LAS VEGAS'),
+  ('evento', 'EPUS - SACRAMENTO'),
+  ('evento', 'EPUS - SAN FRANCISCO'),
+  ('evento', 'EPUS - WASHINGTON'),
+  ('evento', 'EPMX - GDL'),
+  ('evento', 'EPMX - CDMX'),
+  ('evento', 'EPMX - QRO'),
+  ('evento', 'EPMX - MTY'),
+  ('evento', 'EPMX - LEON'),
+  ('evento', 'EPMX - PUEBLA'),
+  ('evento', 'EPMX - AGS'),
+  ('evento', 'EPMX - TOLUCA'),
+  ('evento', 'EPMX - MORELIA'),
+  ('evento', 'Equipo Sinergéticos'),
+  ('evento', 'BGI'),
+  ('evento', 'COL-WJS'),
+  ('evento', 'PERU-WJS'),
+  ('evento', 'EXTERNO'),
+  ('evento', 'SYNERGY'),
+  ('evento', 'SIN EVENTO-MX'),
+  ('evento', 'SIN EVENTO-USA'),
+  ('evento', 'COMITE'),
+  ('evento', 'PLAN CORP. WEBINAR'),
+  ('evento', 'EPUS - DENVER'),
+  ('evento', 'EPUS - FRESNO'),
+  ('evento', 'EPPERU - LIMA'),
+  ('evento', 'EPCOL - MEDELLIN'),
+  ('evento', 'EPCOL - BOGOTA'),
+  ('evento', 'EPUS - SALT LAKE'),
+  ('evento', 'EPUS - ALBUQUERQUE'),
+  ('evento', 'EPUS - SEATTLE'),
+  ('evento', 'LATAM SUR-JS'),
+  ('evento', 'LATAM CENTRO-JS'),
+  ('evento', 'EPUS - PORTLAND'),
+  ('evento', 'EPUS - JACKSONVILLE'),
+  ('evento', 'EPUS - WEST PALM'),
+  ('evento', 'EPUS - BALTIMORE'),
+  ('evento', 'EPMX - CHIHUAHUA'),
+  ('evento', 'WJS- EUR'),
+  ('evento', 'EPMX - SLP'),
+  ('evento', 'EPMX - VTA'),
+  ('evento', 'EPMX - PACH'),
+  ('evento', 'EPMX - HMO'),
+  ('evento', 'EPUS - CHARLOTTE'),
+  ('evento', 'EPCA - TORONTO'),
+  ('evento', 'EPMX - JUAREZ'),
+  ('evento', 'EPMX-CHIHUAHUA'),
+  ('evento', 'EPMX-TIJUANA'),
+  ('evento', 'EPMX-MERIDA'),
+  ('evento', 'EPMX-CANCUN'),
+  ('evento', 'EPCA - VANCOUVER'),
+  ('evento', 'EPUSA-REPUBLICA DOMINICANA'),
+  ('evento', 'EPMX-REY'),
+  ('evento', 'VIP-SU'),
+  ('evento', 'GRAL-SU'),
+  ('evento', 'EPMX-MXL'),
+  ('etiqueta', 'BLACK ACCESS'),
+  ('etiqueta', 'MÁS+'),
+  ('etiqueta', 'Renovacion'),
+  ('etiqueta', 'Equipo Sinergéticos'),
+  ('etiqueta', 'BGI'),
+  ('etiqueta', 'REVOCADO'),
+  ('etiqueta', 'BECA'),
+  ('etiqueta', 'MÁS+ USA'),
+  ('etiqueta', 'MBA'),
+  ('etiqueta', 'LegendarIA MX'),
+  ('etiqueta', 'LegendarIA US'),
+  ('etiqueta', 'LegendarIA LATAM')
+on conflict (tipo, valor) do nothing;

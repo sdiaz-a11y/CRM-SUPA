@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useAutor } from "@/lib/autor-context";
+import { PAISES_AMERICA } from "@/lib/paises-america";
+import { ComboboxBuscador } from "./ComboboxBuscador";
 import type { Cliente } from "@/lib/types";
+
+const OPCIONES_PAIS = PAISES_AMERICA.map((p) => ({ valor: p.nombre, etiqueta: p.nombre, nota: p.lada }));
+const OPCIONES_MEMBRESIA = ["3 Meses", "6 Meses", "12 Meses"].map((m) => ({ valor: m, etiqueta: m }));
 
 export function NuevoClienteModal({
   onClose,
@@ -13,9 +18,30 @@ export function NuevoClienteModal({
   onCreado: (cliente: Cliente) => void;
 }) {
   const { autor } = useAutor();
-  const [form, setForm] = useState({ nombre: "", email: "", telefono: "", pais: "", ciudad: "" });
+  const [form, setForm] = useState({
+    nombre: "",
+    email: "",
+    telefono: "",
+    pais: "",
+    evento: "",
+    tipoMembresia: "",
+    etiqueta: "",
+  });
+  const [eventos, setEventos] = useState<{ valor: string; etiqueta: string }[]>([]);
+  const [etiquetas, setEtiquetas] = useState<{ valor: string; etiqueta: string }[]>([]);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/biblioteca?tipo=evento")
+      .then((r) => r.json())
+      .then((data) => setEventos((data.opciones ?? []).map((v: string) => ({ valor: v, etiqueta: v }))))
+      .catch(() => setEventos([]));
+    fetch("/api/biblioteca?tipo=etiqueta")
+      .then((r) => r.json())
+      .then((data) => setEtiquetas((data.opciones ?? []).map((v: string) => ({ valor: v, etiqueta: v }))))
+      .catch(() => setEtiquetas([]));
+  }, []);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -24,6 +50,17 @@ export function NuevoClienteModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  function onCambiarPais(pais: string) {
+    const lada = PAISES_AMERICA.find((p) => p.nombre === pais)?.lada ?? "";
+    setForm((f) => ({
+      ...f,
+      pais,
+      // Solo antepone la lada si el usuario todavía no había escrito nada,
+      // para no pisarle un número que ya estaba tecleando.
+      telefono: f.telefono.trim() ? f.telefono : lada ? `${lada} ` : f.telefono,
+    }));
+  }
 
   async function crear() {
     if (!autor) return;
@@ -41,7 +78,7 @@ export function NuevoClienteModal({
       return;
     }
     if (data.avisoKajabi) {
-      window.alert(`Cliente creado, pero falló el alta en Kajabi: ${data.avisoKajabi}`);
+      window.alert(`Cliente creado, pero no se pudo dar el acceso en Kajabi: ${data.avisoKajabi}`);
     }
     onCreado(data.cliente);
     onClose();
@@ -65,7 +102,7 @@ export function NuevoClienteModal({
           </div>
 
           <div className="space-y-3">
-            <Campo label="Nombre *">
+            <Campo label="Nombre completo *">
               <input
                 value={form.nombre}
                 onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
@@ -80,29 +117,54 @@ export function NuevoClienteModal({
                 className="w-full rounded-lg border border-silver bg-surface-2 px-3 py-1.5 text-sm outline-none ring-primary/30 focus:ring-2"
               />
             </Campo>
-            <Campo label="Teléfono">
-              <input
-                value={form.telefono}
-                onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))}
-                className="w-full rounded-lg border border-silver bg-surface-2 px-3 py-1.5 text-sm outline-none ring-primary/30 focus:ring-2"
-              />
-            </Campo>
             <div className="grid grid-cols-2 gap-2">
               <Campo label="País">
-                <input
-                  value={form.pais}
-                  onChange={(e) => setForm((f) => ({ ...f, pais: e.target.value }))}
-                  className="w-full rounded-lg border border-silver bg-surface-2 px-3 py-1.5 text-sm outline-none ring-primary/30 focus:ring-2"
+                <ComboboxBuscador
+                  opciones={OPCIONES_PAIS}
+                  valor={form.pais}
+                  onChange={onCambiarPais}
+                  placeholder="Seleccionar país…"
                 />
               </Campo>
-              <Campo label="Ciudad">
+              <Campo label="Teléfono">
                 <input
-                  value={form.ciudad}
-                  onChange={(e) => setForm((f) => ({ ...f, ciudad: e.target.value }))}
+                  value={form.telefono}
+                  onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))}
                   className="w-full rounded-lg border border-silver bg-surface-2 px-3 py-1.5 text-sm outline-none ring-primary/30 focus:ring-2"
                 />
               </Campo>
             </div>
+            <Campo label="Evento">
+              <ComboboxBuscador
+                opciones={eventos}
+                valor={form.evento}
+                onChange={(evento) => setForm((f) => ({ ...f, evento }))}
+                placeholder="Seleccionar evento…"
+              />
+            </Campo>
+            <div className="grid grid-cols-2 gap-2">
+              <Campo label="Tipo de membresía">
+                <ComboboxBuscador
+                  opciones={OPCIONES_MEMBRESIA}
+                  valor={form.tipoMembresia}
+                  onChange={(tipoMembresia) => setForm((f) => ({ ...f, tipoMembresia }))}
+                  placeholder="Seleccionar…"
+                />
+              </Campo>
+              <Campo label="Etiqueta (opcional)">
+                <ComboboxBuscador
+                  opciones={etiquetas}
+                  valor={form.etiqueta}
+                  onChange={(etiqueta) => setForm((f) => ({ ...f, etiqueta }))}
+                  placeholder="Seleccionar…"
+                  etiquetaVacio="— Ninguna —"
+                />
+              </Campo>
+            </div>
+            <p className="text-xs text-muted">
+              Al crear el cliente se le otorga automáticamente el acceso en Kajabi (oferta &quot;Club
+              Sinergético&quot;, con correo de bienvenida).
+            </p>
           </div>
 
           {error && <p className="mt-3 text-xs text-danger">{error}</p>}

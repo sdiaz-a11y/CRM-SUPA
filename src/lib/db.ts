@@ -206,14 +206,17 @@ export async function crearCliente(input: {
   pais?: string | null;
   ciudad?: string | null;
   notas?: string | null;
-  fechaInscripcion?: string | null;
+  evento?: string | null;
+  tipoMembresia?: string | null;
+  etiqueta?: string | null;
   autor: string;
 }): Promise<Cliente> {
   const id = normalizarEmail(input.email);
   const { data: existente } = await supabase.from("clientes").select("id").eq("id", id).maybeSingle();
   if (existente) throw new Error("Ya existe un cliente con ese correo");
 
-  const region = await regionParaCrearOEditar(null, input.pais ?? null);
+  const evento = input.evento?.trim() || null;
+  const region = await regionParaCrearOEditar(evento, input.pais ?? null);
 
   const { data, error } = await supabase
     .from("clientes")
@@ -225,7 +228,12 @@ export async function crearCliente(input: {
       pais: input.pais?.trim() || null,
       ciudad: input.ciudad?.trim() || null,
       notas: input.notas?.trim() || null,
-      fecha_inscripcion: input.fechaInscripcion || null,
+      // Fecha de alta: siempre el momento real de creación, igual que el
+      // resto del CRM (nunca se captura a mano en este formulario).
+      fecha_inscripcion: new Date().toISOString(),
+      evento,
+      tipo_membresia: input.tipoMembresia?.trim() || null,
+      etiqueta: input.etiqueta?.trim() || null,
       // Muy por encima de cualquier fila del CSV: los altas manuales
       // siempre encabezan la lista, como corresponde a "lo más reciente".
       orden_csv: Date.now(),
@@ -236,6 +244,20 @@ export async function crearCliente(input: {
   if (error) throw error;
 
   await registrarEvento(id, "CREACION", `Cliente creado por ${input.autor}`, input.autor);
+  return filaACliente(data as ClienteRow);
+}
+
+// Se llama tras un otorgamiento exitoso de la oferta en Kajabi: refleja en
+// el CRM que el acceso sí se dio, de la misma forma en que ya lo hacía el
+// CSV de origen ("Sí" en la columna Acceso a plataforma).
+export async function marcarAccesoPlataforma(id: string, valor: string): Promise<Cliente> {
+  const { data, error } = await supabase
+    .from("clientes")
+    .update({ acceso_plataforma: valor, actualizado_en: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
   return filaACliente(data as ClienteRow);
 }
 
@@ -444,6 +466,34 @@ export async function actualizarDetalleAcceso(
       autor
     );
   }
+  return filaACliente(data as ClienteRow);
+}
+
+export async function actualizarTags(id: string, tags: string[], autor: string): Promise<Cliente> {
+  const { data: fila, error: errLectura } = await supabase
+    .from("clientes")
+    .select("tags")
+    .eq("id", id)
+    .maybeSingle();
+  if (errLectura) throw errLectura;
+  if (!fila) throw new Error("Cliente no encontrado");
+  const anteriores: string[] = fila.tags ?? [];
+
+  const { data, error } = await supabase
+    .from("clientes")
+    .update({ tags, actualizado_en: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+
+  const agregados = tags.filter((t) => !anteriores.includes(t));
+  const quitados = anteriores.filter((t) => !tags.includes(t));
+  const detalle = [agregados.length ? `+ ${agregados.join(", ")}` : null, quitados.length ? `− ${quitados.join(", ")}` : null]
+    .filter(Boolean)
+    .join(" · ");
+  if (detalle) await registrarEvento(id, "EDICION", `Tags: ${detalle}`, autor);
+
   return filaACliente(data as ClienteRow);
 }
 

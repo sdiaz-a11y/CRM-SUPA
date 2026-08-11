@@ -26,6 +26,7 @@ import {
   ClipboardList,
   StickyNote,
   Activity,
+  Tags,
 } from "lucide-react";
 import type { Accesos, Cliente, EventoTimeline } from "@/lib/types";
 import { useAutor } from "@/lib/autor-context";
@@ -100,6 +101,15 @@ export function ClientePanel({
   const [enviandoNota, setEnviandoNota] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiado, setCopiado] = useState<"email" | "telefono" | null>(null);
+  const [tagsCatalogo, setTagsCatalogo] = useState<string[]>([]);
+  const [guardandoTag, setGuardandoTag] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/biblioteca?tipo=tag")
+      .then((r) => r.json())
+      .then((data) => setTagsCatalogo(data.opciones ?? []))
+      .catch(() => setTagsCatalogo([]));
+  }, []);
 
   useEffect(() => {
     let cancelado = false;
@@ -198,6 +208,30 @@ export function ClientePanel({
     }
     setCliente(data.cliente);
     onClienteActualizado(data.cliente);
+  }
+
+  async function toggleTag(tag: string, activo: boolean) {
+    if (!cliente || !autor) return;
+    const nuevos = activo ? [...cliente.tags, tag] : cliente.tags.filter((t) => t !== tag);
+    setGuardandoTag(tag);
+    setError(null);
+    const res = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tipo: "tags", tags: nuevos, autor }),
+    });
+    const data = await res.json();
+    setGuardandoTag(null);
+    if (!res.ok) {
+      setError(data.error ?? "No se pudo actualizar los tags");
+      return;
+    }
+    setCliente(data.cliente);
+    onClienteActualizado(data.cliente);
+    const eventosRes = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/eventos`).then((r) =>
+      r.json()
+    );
+    setEventos(eventosRes.eventos ?? []);
   }
 
   async function enviarNota() {
@@ -399,6 +433,35 @@ export function ClientePanel({
                     >
                       Editar accesos →
                     </button>
+                  </Tarjeta>
+
+                  <Tarjeta titulo="Tags">
+                    {tagsCatalogo.length === 0 ? (
+                      <p className="text-sm text-muted">
+                        Todavía no hay tags en la Biblioteca. Agrégalos desde el menú lateral.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {tagsCatalogo.map((tag) => {
+                          const activo = cliente.tags.includes(tag);
+                          return (
+                            <button
+                              key={tag}
+                              onClick={() => toggleTag(tag, !activo)}
+                              disabled={guardandoTag === tag}
+                              className={`ease-spring flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition disabled:opacity-50 ${
+                                activo
+                                  ? "brand-plate text-white"
+                                  : "border border-silver text-muted hover:text-foreground"
+                              }`}
+                            >
+                              <Tags className="h-3 w-3" strokeWidth={1.75} />
+                              {tag}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </Tarjeta>
 
                   <Tarjeta titulo="Datos del cliente">

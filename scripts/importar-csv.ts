@@ -118,6 +118,8 @@ async function main() {
         vip: { activo: false, cantidad: 0, variante: null },
         black: { activo: false, cantidad: 0, variante: null },
       },
+      etiqueta: existente?.etiqueta ?? null,
+      tags: existente?.tags ?? [],
       kajabiContactId: existente?.kajabiContactId ?? null,
       creadoEn: existente?.creadoEn ?? ahora,
       actualizadoEn: ahora,

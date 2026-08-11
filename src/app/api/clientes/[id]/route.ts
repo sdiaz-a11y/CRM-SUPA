@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { actualizarAcceso, actualizarDatosCliente, actualizarDetalleAcceso, obtenerCliente } from "@/lib/db";
+import {
+  actualizarAcceso,
+  actualizarDatosCliente,
+  actualizarDetalleAcceso,
+  actualizarTags,
+  obtenerCliente,
+} from "@/lib/db";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -52,6 +58,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         },
         body.autor
       );
+      return NextResponse.json({ cliente });
+    }
+
+    if (body.tipo === "tags") {
+      const cliente = await actualizarTags(clienteId, body.tags ?? [], body.autor);
       return NextResponse.json({ cliente });
     }
 

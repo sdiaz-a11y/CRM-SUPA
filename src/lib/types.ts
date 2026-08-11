@@ -45,6 +45,13 @@ export type Cliente = {
   // Columna U: notas del equipo de soporte técnico.
   notasSoporte: string | null;
 
+  // Clasificación propia del CRM, independiente de los tags de Kajabi.
+  etiqueta: string | null;
+
+  // Tags asignados desde el panel del cliente (catálogo "Biblioteca"),
+  // distintos de "etiqueta": un cliente puede tener varios.
+  tags: string[];
+
   // Id del contacto en Kajabi, si ya se creó/vinculó ahí.
   kajabiContactId: string | null;
 
