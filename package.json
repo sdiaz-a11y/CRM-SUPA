@@ -8,9 +8,11 @@
     "start": "next start",
     "lint": "eslint",
     "importar-csv": "tsx scripts/importar-csv.ts",
-    "asignar-boletos": "tsx scripts/asignar-boletos.ts"
+    "asignar-boletos": "tsx scripts/asignar-boletos.ts",
+    "migrar-supabase": "tsx scripts/migrar-a-supabase.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.2",
     "date-fns": "^4.4.0",
     "lucide-react": "^0.469.0",
     "next": "15.1.6",
