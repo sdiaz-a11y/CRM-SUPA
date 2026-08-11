@@ -509,10 +509,13 @@ export async function vincularKajabiContactId(id: string, kajabiContactId: strin
   if (error) throw error;
 }
 
-// Punto de entrada del webhook Kajabi → CRM: registra en la timeline que se
-// asignó un tag. Si el correo no existe todavía en el CRM (p. ej. alguien
-// dado de alta directo en Kajabi, sin pasar por el CRM) se crea el cliente
-// primero, para que el tag tenga dónde caer.
+// Registra en la timeline que a un cliente se le asignó un tag de Kajabi.
+// Dos caminos llegan aquí para el mismo hecho real (el alta del CRM, que
+// sabe que otorgar la oferta dispara el tag; y el aviso de Kajabi/Zapier,
+// para altas que pasan por fuera del CRM) — por eso es idempotente: si ya
+// hay un evento de este mismo tag para este cliente, no lo duplica. Si el
+// correo no existe todavía en el CRM (alta directo en Kajabi) se crea el
+// cliente primero, para que el tag tenga dónde caer.
 export async function registrarTagKajabi(email: string, nombre: string, tagNombre: string): Promise<void> {
   const id = normalizarEmail(email);
   const { data: existente, error: errLectura } = await supabase
@@ -535,5 +538,35 @@ export async function registrarTagKajabi(email: string, nombre: string, tagNombr
     await registrarEvento(id, "CREACION", "Cliente creado automáticamente desde Kajabi", "Kajabi");
   }
 
-  await registrarEvento(id, "KAJABI", `Tag de Kajabi asignado: "${tagNombre}"`, "Kajabi");
+  const detalle = `Tag de Kajabi asignado: "${tagNombre}"`;
+  const { data: yaRegistrado, error: errDup } = await supabase
+    .from("eventos_timeline")
+    .select("id")
+    .eq("cliente_id", id)
+    .eq("tipo", "KAJABI")
+    .eq("detalle", detalle)
+    .maybeSingle();
+  if (errDup) throw errDup;
+  if (yaRegistrado) return;
+
+  await registrarEvento(id, "KAJABI", detalle, "Kajabi");
+}
+
+const CURSOR_SYNC_KAJABI = "ultimo_customer_creado_en";
+
+export async function obtenerCursorSyncKajabi(): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("kajabi_sync_estado")
+    .select("valor")
+    .eq("clave", CURSOR_SYNC_KAJABI)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.valor ?? null;
+}
+
+export async function guardarCursorSyncKajabi(valor: string): Promise<void> {
+  const { error } = await supabase
+    .from("kajabi_sync_estado")
+    .upsert({ clave: CURSOR_SYNC_KAJABI, valor, actualizado_en: new Date().toISOString() });
+  if (error) throw error;
 }

@@ -4,6 +4,7 @@
 const KAJABI_API = "https://api.kajabi.com/v1";
 export const KAJABI_SITE_ID = "2147540333";
 export const KAJABI_OFFER_ID_CLUB_SINERGETICO = "2148198523";
+export const KAJABI_TAG_MIEMBRO_DEL_CLUB = "Miembro del club";
 
 type TokenCache = { token: string; expiraEn: number };
 let tokenCache: TokenCache | null = null;
@@ -113,4 +114,52 @@ export async function altaEnKajabi(nombre: string, email: string): Promise<strin
   const contactId = await obtenerOCrearContacto(nombre, email);
   await otorgarOferta(contactId, KAJABI_OFFER_ID_CLUB_SINERGETICO);
   return contactId;
+}
+
+// --- Sincronización por consulta periódica (reemplaza al webhook nativo,
+// cuyo permiso "Webhooks" no está disponible para esta API key) ---
+//
+// La cuenta de Kajabi no tiene scope para crear/leer webhooks, así que en
+// vez de esperar un aviso se consulta activamente "¿a quién se le otorgó
+// esta oferta?" (GET /v1/customers?filter[has_offer_id]=...), que sí está
+// permitido con los scopes de view:customers ya otorgados. Cubre tanto las
+// altas hechas desde el CRM como las compras directas en Kajabi.
+
+type ClienteKajabiNuevo = { email: string; nombre: string; creadoEn: string };
+
+type CustomersResponse = {
+  data: { attributes: { name: string; email: string; created_at: string } }[];
+};
+
+// Trae, del más viejo al más nuevo, los clientes a los que se les otorgó la
+// oferta después de `creadoDespuesDe` (ISO). Pagina hasta encontrar uno más
+// viejo que el cursor o quedarse sin páginas.
+export async function nuevosConOfertaDesde(
+  offerId: string,
+  creadoDespuesDe: string
+): Promise<ClienteKajabiNuevo[]> {
+  const encontrados: ClienteKajabiNuevo[] = [];
+  const tamanoPagina = 50;
+  for (let pagina = 1; ; pagina++) {
+    const params = new URLSearchParams({
+      "filter[site_id]": KAJABI_SITE_ID,
+      "filter[has_offer_id]": offerId,
+      sort: "-created_at",
+      "page[size]": String(tamanoPagina),
+      "page[number]": String(pagina),
+    });
+    const data = (await kajabiFetch(`/customers?${params}`)) as CustomersResponse;
+    if (data.data.length === 0) break;
+
+    let llegoAlCursor = false;
+    for (const c of data.data) {
+      if (c.attributes.created_at <= creadoDespuesDe) {
+        llegoAlCursor = true;
+        break;
+      }
+      encontrados.push({ email: c.attributes.email, nombre: c.attributes.name, creadoEn: c.attributes.created_at });
+    }
+    if (llegoAlCursor || data.data.length < tamanoPagina) break;
+  }
+  return encontrados.reverse();
 }

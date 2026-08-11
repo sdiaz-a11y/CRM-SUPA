@@ -3,12 +3,13 @@ import {
   crearCliente,
   listarClientes,
   marcarAccesoPlataforma,
+  registrarTagKajabi,
   vincularKajabiContactId,
   type EstadoFiltro,
   type RegionFiltro,
   type VigenciaFiltro,
 } from "@/lib/db";
-import { altaEnKajabi } from "@/lib/kajabi";
+import { altaEnKajabi, KAJABI_TAG_MIEMBRO_DEL_CLUB } from "@/lib/kajabi";
 import { invitarASkool } from "@/lib/skool";
 
 export async function GET(req: NextRequest) {
@@ -71,6 +72,10 @@ export async function POST(req: NextRequest) {
       const kajabiContactId = await altaEnKajabi(cliente.nombre, cliente.email);
       await vincularKajabiContactId(cliente.id, kajabiContactId);
       cliente = await marcarAccesoPlataforma(cliente.id, "Si");
+      // Registro inmediato en la timeline: no hay que esperar a que el
+      // sincronizador periódico (cada ~15 min) lo detecte, ya sabemos que
+      // otorgar esta oferta es justo lo que asigna el tag en Kajabi.
+      await registrarTagKajabi(cliente.email, cliente.nombre, KAJABI_TAG_MIEMBRO_DEL_CLUB);
     } catch (err) {
       avisoKajabi = err instanceof Error ? err.message : "No se pudo otorgar el acceso en Kajabi";
     }

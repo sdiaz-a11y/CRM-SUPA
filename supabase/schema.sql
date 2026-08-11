@@ -193,3 +193,14 @@ insert into catalogo_opciones (tipo, valor) values
   ('etiqueta', 'LegendarIA US'),
   ('etiqueta', 'LegendarIA LATAM')
 on conflict (tipo, valor) do nothing;
+
+-- Cursor de la sincronización periódica con Kajabi (reemplaza al webhook
+-- nativo, sin permiso disponible para esta cuenta): guarda hasta qué
+-- momento ya se revisó, para no reprocesar clientes en cada corrida ni,
+-- sobre todo, reprocesar el historial completo la primera vez que corre.
+create table if not exists kajabi_sync_estado (
+  clave text primary key,
+  valor text,
+  actualizado_en timestamptz not null default now()
+);
+alter table kajabi_sync_estado enable row level security;
