@@ -3,6 +3,8 @@ import {
   crearCliente,
   listarClientes,
   marcarAccesoPlataforma,
+  marcarInvitacionSkoolEnviada,
+  recalcularAccesos,
   registrarTagKajabi,
   vincularKajabiContactId,
   type EstadoFiltro,
@@ -76,6 +78,9 @@ export async function POST(req: NextRequest) {
       // sincronizador periódico (cada ~15 min) lo detecte, ya sabemos que
       // otorgar esta oferta es justo lo que asigna el tag en Kajabi.
       await registrarTagKajabi(cliente.email, cliente.nombre, KAJABI_TAG_MIEMBRO_DEL_CLUB);
+      // Con el acceso ya confirmado, se calculan los boletos (General/VIP/
+      // Black) igual que lo haría `npm run asignar-boletos` en lote.
+      cliente = await recalcularAccesos(cliente.id);
     } catch (err) {
       avisoKajabi = err instanceof Error ? err.message : "No se pudo otorgar el acceso en Kajabi";
     }
@@ -85,6 +90,7 @@ export async function POST(req: NextRequest) {
     let avisoSkool: string | null = null;
     try {
       await invitarASkool(cliente.email);
+      cliente = await marcarInvitacionSkoolEnviada(cliente.id);
     } catch (err) {
       avisoSkool = err instanceof Error ? err.message : "No se pudo enviar la invitación a Skool";
     }

@@ -83,9 +83,21 @@ export async function crearContacto(nombre: string, email: string): Promise<stri
   return data.data.id;
 }
 
+async function actualizarNombreContacto(contactId: string, nombre: string): Promise<void> {
+  await kajabiFetch(`/contacts/${contactId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ data: { type: "contacts", id: contactId, attributes: { name: nombre } } }),
+  });
+}
+
 export async function obtenerOCrearContacto(nombre: string, email: string): Promise<string> {
   const existente = await buscarContactoPorCorreo(email);
-  if (existente) return existente;
+  if (existente) {
+    // Si el contacto ya existía en Kajabi (p. ej. de una compra anterior),
+    // se sincroniza el nombre con el que se capturó ahora en el CRM.
+    await actualizarNombreContacto(existente, nombre);
+    return existente;
+  }
   return crearContacto(nombre, email);
 }
 
@@ -94,6 +106,21 @@ export async function otorgarOferta(
   offerId: string,
   opciones?: { enviarBienvenida?: boolean }
 ): Promise<void> {
+  // Se revoca primero (ignorando el error si no la tenía activa) para
+  // forzar que Kajabi reactive todos los productos del paquete: un POST
+  // simple no lo hace si el contacto ya tenía la oferta registrada con los
+  // productos individuales desactivados — p. ej. le venció hace un año
+  // (la oferta dura 12 meses) y ahora renueva, o quedó en un estado raro
+  // por una acción manual en el dashboard de Kajabi.
+  try {
+    await kajabiFetch(`/contacts/${contactId}/relationships/offers`, {
+      method: "DELETE",
+      body: JSON.stringify({ data: [{ type: "offers", id: offerId }] }),
+    });
+  } catch {
+    // No tenía la oferta activa — nada que revocar, se continúa igual.
+  }
+
   const body: Record<string, unknown> = {
     data: [{ type: "offers", id: offerId }],
   };

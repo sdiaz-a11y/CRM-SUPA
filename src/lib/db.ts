@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
-import { parsearFechaSkool } from "./fechas";
-import { cargarPaisPorEvento, regionDeCliente } from "./boletos";
+import { calcularVencimientoSkool, formatearFechaSkool, parsearFechaSkool } from "./fechas";
+import { cargarInventarioBoletos, cargarPaisPorEvento, calcularAccesos, regionDeCliente } from "./boletos";
 import { filaACliente, fechaSkoolADateOnly, type ClienteRow } from "./supabase-map";
 import type { Accesos, Cliente, EventoTimeline, TipoEvento, Variante } from "./types";
 
@@ -254,6 +254,70 @@ export async function marcarAccesoPlataforma(id: string, valor: string): Promise
   const { data, error } = await supabase
     .from("clientes")
     .update({ acceso_plataforma: valor, actualizado_en: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return filaACliente(data as ClienteRow);
+}
+
+// Recalcula General/VIP/Black con el motor de reglas (REGLAS-BOLETOS-
+// SYNERGY.md) a partir de evento + tipo de membresía + acceso a
+// plataforma ya guardados. Se llama tras confirmar el acceso en Kajabi,
+// igual que hace `npm run asignar-boletos` en lote para el resto del CSV.
+export async function recalcularAccesos(id: string): Promise<Cliente> {
+  const { data: fila, error: errLectura } = await supabase.from("clientes").select("*").eq("id", id).maybeSingle();
+  if (errLectura) throw errLectura;
+  if (!fila) throw new Error("Cliente no encontrado");
+  const cliente = filaACliente(fila as ClienteRow);
+
+  const inventario = await cargarInventarioBoletos();
+  const { accesos, sinInformacion } = calcularAccesos(
+    {
+      evento: cliente.evento,
+      pais: cliente.pais,
+      accesoPlataforma: cliente.accesoPlataforma,
+      tipoMembresia: cliente.tipoMembresia,
+      fechaInscripcion: cliente.fechaInscripcion,
+      finAcceso: cliente.finAcceso,
+    },
+    inventario
+  );
+
+  const { data, error } = await supabase
+    .from("clientes")
+    .update({ accesos, boletos_sin_informacion: sinInformacion, actualizado_en: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return filaACliente(data as ClienteRow);
+}
+
+// Se llama tras un envío exitoso de la invitación a Skool: marca el campo
+// (ya existente, traído del CSV de origen) y calcula el vencimiento a
+// partir de la fecha de inscripción + duración de la membresía.
+export async function marcarInvitacionSkoolEnviada(id: string): Promise<Cliente> {
+  const { data: fila, error: errLectura } = await supabase
+    .from("clientes")
+    .select("fecha_inscripcion,tipo_membresia")
+    .eq("id", id)
+    .maybeSingle();
+  if (errLectura) throw errLectura;
+  if (!fila) throw new Error("Cliente no encontrado");
+
+  const vencimiento = fila.fecha_inscripcion
+    ? calcularVencimientoSkool(fila.fecha_inscripcion, fila.tipo_membresia)
+    : null;
+
+  const { data, error } = await supabase
+    .from("clientes")
+    .update({
+      invitacion_skool: "Invitación enviada",
+      vencimiento_skool: vencimiento ? formatearFechaSkool(vencimiento) : null,
+      vencimiento_skool_fecha: fechaSkoolADateOnly(vencimiento),
+      actualizado_en: new Date().toISOString(),
+    })
     .eq("id", id)
     .select("*")
     .single();
