@@ -45,6 +45,9 @@ export type Cliente = {
   // Columna U: notas del equipo de soporte técnico.
   notasSoporte: string | null;
 
+  // Id del contacto en Kajabi, si ya se creó/vinculó ahí.
+  kajabiContactId: string | null;
+
   creadoEn: string; // ISO
   actualizadoEn: string; // ISO
 };
@@ -56,7 +59,8 @@ export type TipoEvento =
   | "ACCESO_GENERAL"
   | "ACCESO_VIP"
   | "ACCESO_BLACK"
-  | "IMPORTACION";
+  | "IMPORTACION"
+  | "KAJABI";
 
 export type EventoTimeline = {
   id: string;

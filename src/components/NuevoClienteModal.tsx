@@ -40,6 +40,9 @@ export function NuevoClienteModal({
       setError(data.error ?? "No se pudo crear el cliente");
       return;
     }
+    if (data.avisoKajabi) {
+      window.alert(`Cliente creado, pero falló el alta en Kajabi: ${data.avisoKajabi}`);
+    }
     onCreado(data.cliente);
     onClose();
   }

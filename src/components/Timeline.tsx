@@ -6,6 +6,7 @@ import {
   Crown,
   Gem,
   UploadCloud,
+  Tag,
 } from "lucide-react";
 import type { EventoTimeline, TipoEvento } from "@/lib/types";
 
@@ -17,6 +18,7 @@ const ICONS: Record<TipoEvento, typeof UserPlus> = {
   ACCESO_VIP: Crown,
   ACCESO_BLACK: Gem,
   IMPORTACION: UploadCloud,
+  KAJABI: Tag,
 };
 
 const LABEL: Record<TipoEvento, string> = {
@@ -27,6 +29,7 @@ const LABEL: Record<TipoEvento, string> = {
   ACCESO_VIP: "Acceso VIP",
   ACCESO_BLACK: "Black Access",
   IMPORTACION: "Importado",
+  KAJABI: "Kajabi",
 };
 
 export function Timeline({ eventos }: { eventos: EventoTimeline[] }) {

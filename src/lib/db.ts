@@ -453,3 +453,37 @@ export async function agregarNota(id: string, nota: string, autor: string): Prom
   if (!data) throw new Error("Cliente no encontrado");
   await registrarEvento(id, "NOTA", nota.trim(), autor);
 }
+
+export async function vincularKajabiContactId(id: string, kajabiContactId: string): Promise<void> {
+  const { error } = await supabase.from("clientes").update({ kajabi_contact_id: kajabiContactId }).eq("id", id);
+  if (error) throw error;
+}
+
+// Punto de entrada del webhook Kajabi → CRM: registra en la timeline que se
+// asignó un tag. Si el correo no existe todavía en el CRM (p. ej. alguien
+// dado de alta directo en Kajabi, sin pasar por el CRM) se crea el cliente
+// primero, para que el tag tenga dónde caer.
+export async function registrarTagKajabi(email: string, nombre: string, tagNombre: string): Promise<void> {
+  const id = normalizarEmail(email);
+  const { data: existente, error: errLectura } = await supabase
+    .from("clientes")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
+  if (errLectura) throw errLectura;
+
+  if (!existente) {
+    const region = await regionParaCrearOEditar(null, null);
+    const { error } = await supabase.from("clientes").insert({
+      id,
+      nombre: nombre?.trim() || id,
+      email: id,
+      orden_csv: Date.now(),
+      region,
+    });
+    if (error) throw error;
+    await registrarEvento(id, "CREACION", "Cliente creado automáticamente desde Kajabi", "Kajabi");
+  }
+
+  await registrarEvento(id, "KAJABI", `Tag de Kajabi asignado: "${tagNombre}"`, "Kajabi");
+}

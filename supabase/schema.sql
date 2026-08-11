@@ -76,3 +76,7 @@ create index if not exists idx_eventos_tipo on eventos_timeline (tipo);
 -- navegador, tendrás que crear policies explícitas aquí.
 alter table clientes enable row level security;
 alter table eventos_timeline enable row level security;
+
+-- Integración con Kajabi: id del contacto en Kajabi, para no tener que
+-- rebuscarlo por correo en cada alta/otorgamiento de oferta.
+alter table clientes add column if not exists kajabi_contact_id text;

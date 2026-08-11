@@ -118,6 +118,7 @@ async function main() {
         vip: { activo: false, cantidad: 0, variante: null },
         black: { activo: false, cantidad: 0, variante: null },
       },
+      kajabiContactId: existente?.kajabiContactId ?? null,
       creadoEn: existente?.creadoEn ?? ahora,
       actualizadoEn: ahora,
     };

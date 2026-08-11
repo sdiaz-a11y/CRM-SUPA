@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   crearCliente,
   listarClientes,
+  vincularKajabiContactId,
   type EstadoFiltro,
   type RegionFiltro,
   type VigenciaFiltro,
 } from "@/lib/db";
+import { altaEnKajabi } from "@/lib/kajabi";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -55,7 +57,20 @@ export async function POST(req: NextRequest) {
       fechaInscripcion: body.fechaInscripcion,
       autor: body.autor,
     });
-    return NextResponse.json({ cliente });
+
+    // El alta en Kajabi es un efecto secundario del alta en el CRM: si
+    // Kajabi falla (fuera de línea, credenciales vencidas, etc.) el cliente
+    // igual queda creado en el CRM y se avisa del problema, en vez de
+    // bloquear el flujo principal por la disponibilidad de un tercero.
+    let avisoKajabi: string | null = null;
+    try {
+      const kajabiContactId = await altaEnKajabi(cliente.nombre, cliente.email);
+      await vincularKajabiContactId(cliente.id, kajabiContactId);
+    } catch (err) {
+      avisoKajabi = err instanceof Error ? err.message : "No se pudo otorgar el acceso en Kajabi";
+    }
+
+    return NextResponse.json({ cliente, avisoKajabi });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido";
     return NextResponse.json({ error: message }, { status: 400 });

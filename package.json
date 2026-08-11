@@ -12,7 +12,8 @@
     "lint": "eslint",
     "importar-csv": "tsx scripts/importar-csv.ts",
     "asignar-boletos": "tsx scripts/asignar-boletos.ts",
-    "migrar-supabase": "tsx scripts/migrar-a-supabase.ts"
+    "migrar-supabase": "tsx scripts/migrar-a-supabase.ts",
+    "registrar-webhook-kajabi": "tsx scripts/registrar-webhook-kajabi.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",

@@ -28,6 +28,7 @@ export type ClienteRow = {
   notas_soporte: string | null;
   region: string;
   accesos: Accesos;
+  kajabi_contact_id: string | null;
   creado_en: string;
   actualizado_en: string;
 };
@@ -55,6 +56,7 @@ export function filaACliente(r: ClienteRow): Cliente {
     llamada: r.llamada,
     notasSoporte: r.notas_soporte,
     accesos: r.accesos,
+    kajabiContactId: r.kajabi_contact_id,
     creadoEn: r.creado_en,
     actualizadoEn: r.actualizado_en,
   };
