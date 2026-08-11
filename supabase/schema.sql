@@ -100,6 +100,7 @@ create table if not exists catalogo_opciones (
   creado_en timestamptz not null default now(),
   unique (tipo, valor)
 );
+alter table catalogo_opciones enable row level security;
 
 insert into catalogo_opciones (tipo, valor) values
   ('evento', 'BOOTCAMP'),
