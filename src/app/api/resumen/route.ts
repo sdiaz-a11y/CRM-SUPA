@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { listarEventosGlobal, listarTodosClientes } from "@/lib/db";
 import { parsearFechaSkool } from "@/lib/fechas";
 
+// Este endpoint pagina la tabla completa de clientes para las agregaciones
+// del dashboard; con 23k+ filas puede pasar el límite por defecto.
+export const maxDuration = 30;
+
 function agruparTopMasOtros(
   distribucion: Record<string, number>,
   top: number
