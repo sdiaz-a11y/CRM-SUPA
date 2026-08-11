@@ -9,6 +9,7 @@ import {
   type VigenciaFiltro,
 } from "@/lib/db";
 import { altaEnKajabi } from "@/lib/kajabi";
+import { invitarASkool } from "@/lib/skool";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -74,7 +75,16 @@ export async function POST(req: NextRequest) {
       avisoKajabi = err instanceof Error ? err.message : "No se pudo otorgar el acceso en Kajabi";
     }
 
-    return NextResponse.json({ cliente, avisoKajabi });
+    // Igual de resiliente: la invitación a Skool no bloquea el alta si el
+    // servicio falla.
+    let avisoSkool: string | null = null;
+    try {
+      await invitarASkool(cliente.email);
+    } catch (err) {
+      avisoSkool = err instanceof Error ? err.message : "No se pudo enviar la invitación a Skool";
+    }
+
+    return NextResponse.json({ cliente, avisoKajabi, avisoSkool });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido";
     return NextResponse.json({ error: message }, { status: 400 });

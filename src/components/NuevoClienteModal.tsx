@@ -77,8 +77,11 @@ export function NuevoClienteModal({
       setError(data.error ?? "No se pudo crear el cliente");
       return;
     }
-    if (data.avisoKajabi) {
-      window.alert(`Cliente creado, pero no se pudo dar el acceso en Kajabi: ${data.avisoKajabi}`);
+    const avisos: string[] = [];
+    if (data.avisoKajabi) avisos.push(`Kajabi: ${data.avisoKajabi}`);
+    if (data.avisoSkool) avisos.push(`Skool: ${data.avisoSkool}`);
+    if (avisos.length) {
+      window.alert(`Cliente creado, pero hubo problemas:\n\n${avisos.join("\n")}`);
     }
     onCreado(data.cliente);
     onClose();
@@ -163,7 +166,8 @@ export function NuevoClienteModal({
             </div>
             <p className="text-xs text-muted">
               Al crear el cliente se le otorga automáticamente el acceso en Kajabi (oferta &quot;Club
-              Sinergético&quot;, con correo de bienvenida).
+              Sinergético&quot;, con correo de bienvenida) y se le envía la invitación a la comunidad de
+              Skool.
             </p>
           </div>
 
