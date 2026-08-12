@@ -1,10 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Search, Plus, ChevronLeft, ChevronRight, Calendar, CalendarX, X, ChevronDown, Check } from "lucide-react";
+import {
+  Search,
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+  Calendar,
+  CalendarX,
+  X,
+  ChevronDown,
+  Check,
+  Upload,
+} from "lucide-react";
 import type { Cliente } from "@/lib/types";
 import { ClientePanel } from "@/components/ClientePanel";
 import { NuevoClienteModal } from "@/components/NuevoClienteModal";
+import { ImportarClientesModal } from "@/components/ImportarClientesModal";
 
 const LIMITE = 100;
 
@@ -31,6 +43,8 @@ export default function ClientesPage() {
   const [pagina, setPagina] = useState(1);
   const [seleccionado, setSeleccionado] = useState<string | null>(null);
   const [mostrarNuevo, setMostrarNuevo] = useState(false);
+  const [mostrarImportar, setMostrarImportar] = useState(false);
+  const [recargaKey, setRecargaKey] = useState(0);
   const [filtros, setFiltros] = useState(FILTROS_VACIOS);
   const [opciones, setOpciones] = useState<{ eventos: string[]; membresias: string[] }>({
     eventos: [],
@@ -75,7 +89,7 @@ export default function ClientesPage() {
       clearTimeout(timeout);
       controlador.abort();
     };
-  }, [busqueda, pagina, filtros]);
+  }, [busqueda, pagina, filtros, recargaKey]);
 
   function actualizarEnLista(cliente: Cliente) {
     setClientes((prev) => prev.map((c) => (c.id === cliente.id ? cliente : c)));
@@ -107,13 +121,22 @@ export default function ClientesPage() {
           <h1 className="text-xl font-semibold text-foreground">Clientes</h1>
           <p className="text-sm text-muted">{total.toLocaleString("es-MX")} clientes registrados</p>
         </div>
-        <button
-          onClick={() => setMostrarNuevo(true)}
-          className="ease-spring flex items-center gap-2 rounded-xl brand-plate px-4 py-2.5 text-sm font-medium text-white transition"
-        >
-          <Plus className="h-4 w-4" strokeWidth={2} />
-          Nuevo cliente
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setMostrarImportar(true)}
+            className="ease-spring flex items-center gap-2 rounded-xl border border-silver bg-surface px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-surface-2"
+          >
+            <Upload className="h-4 w-4" strokeWidth={2} />
+            Importar CSV
+          </button>
+          <button
+            onClick={() => setMostrarNuevo(true)}
+            className="ease-spring flex items-center gap-2 rounded-xl brand-plate px-4 py-2.5 text-sm font-medium text-white transition"
+          >
+            <Plus className="h-4 w-4" strokeWidth={2} />
+            Nuevo cliente
+          </button>
+        </div>
       </div>
 
       <div className="relative mb-4">
@@ -320,6 +343,13 @@ export default function ClientesPage() {
         <NuevoClienteModal
           onClose={() => setMostrarNuevo(false)}
           onCreado={(cliente) => setClientes((prev) => [cliente, ...prev])}
+        />
+      )}
+
+      {mostrarImportar && (
+        <ImportarClientesModal
+          onClose={() => setMostrarImportar(false)}
+          onTerminado={() => setRecargaKey((k) => k + 1)}
         />
       )}
     </div>
