@@ -81,6 +81,11 @@ export default function ClientesPage() {
     setClientes((prev) => prev.map((c) => (c.id === cliente.id ? cliente : c)));
   }
 
+  function quitarDeLista(id: string) {
+    setClientes((prev) => prev.filter((c) => c.id !== id));
+    setTotal((prev) => Math.max(0, prev - 1));
+  }
+
   const hayFiltrosActivos =
     filtros.estado !== "todos" ||
     filtros.region !== "todos" ||
@@ -307,6 +312,7 @@ export default function ClientesPage() {
           clienteId={seleccionado}
           onClose={() => setSeleccionado(null)}
           onClienteActualizado={actualizarEnLista}
+          onClienteEliminado={quitarDeLista}
         />
       )}
 

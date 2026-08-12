@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Sparkles, LogOut, Library } from "lucide-react";
+import { LayoutDashboard, Users, Sparkles, LogOut, Library, Trash2 } from "lucide-react";
 import { useAutor } from "@/lib/autor-context";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/clientes", label: "Clientes", icon: Users },
   { href: "/biblioteca", label: "Biblioteca", icon: Library },
+  { href: "/eliminados", label: "Eliminados", icon: Trash2 },
 ];
 
 export function Sidebar() {

@@ -29,6 +29,7 @@ import {
   Tags,
   RefreshCw,
   AlertTriangle,
+  Trash2,
 } from "lucide-react";
 import type { Accesos, Cliente, EventoTimeline } from "@/lib/types";
 import { useAutor } from "@/lib/autor-context";
@@ -93,10 +94,12 @@ export function ClientePanel({
   clienteId,
   onClose,
   onClienteActualizado,
+  onClienteEliminado,
 }: {
   clienteId: string;
   onClose: () => void;
   onClienteActualizado: (cliente: Cliente) => void;
+  onClienteEliminado?: (id: string) => void;
 }) {
   const { autor } = useAutor();
   const [cliente, setCliente] = useState<Cliente | null>(null);
@@ -116,6 +119,8 @@ export function ClientePanel({
   const [estadoKajabi, setEstadoKajabi] = useState<EstadoKajabi>("cargando");
   const [pasoRenovar, setPasoRenovar] = useState<0 | 1 | 2>(0);
   const [renovando, setRenovando] = useState(false);
+  const [pasoEliminar, setPasoEliminar] = useState<0 | 1 | 2>(0);
+  const [eliminando, setEliminando] = useState(false);
 
   useEffect(() => {
     fetch("/api/biblioteca?tipo=tag")
@@ -130,6 +135,7 @@ export function ClientePanel({
     setTab("resumen");
     setEstadoKajabi("cargando");
     setPasoRenovar(0);
+    setPasoEliminar(0);
     Promise.all([
       fetch(`/api/clientes/${encodeURIComponent(clienteId)}`).then((r) => r.json()),
       fetch(`/api/clientes/${encodeURIComponent(clienteId)}/eventos`).then((r) => r.json()),
@@ -267,6 +273,35 @@ export function ClientePanel({
       r.json()
     );
     setEventos(eventosRes.eventos ?? []);
+  }
+
+  async function confirmarEliminar() {
+    if (!cliente || !autor) return;
+    if (pasoEliminar < 2) {
+      setPasoEliminar((p) => (p + 1) as 0 | 1 | 2);
+      return;
+    }
+    setEliminando(true);
+    setError(null);
+    const res = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/eliminar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ autor }),
+    });
+    const data = await res.json();
+    setEliminando(false);
+    if (!res.ok) {
+      setError(data.error ?? "No se pudo eliminar el cliente");
+      setPasoEliminar(0);
+      return;
+    }
+    if (data.avisoKajabi) {
+      window.alert(
+        `El cliente se archivó en el CRM, pero no se pudo eliminar en Kajabi: ${data.avisoKajabi}`
+      );
+    }
+    onClienteEliminado?.(cliente.id);
+    onClose();
   }
 
   async function toggleTag(tag: string, activo: boolean) {
@@ -589,6 +624,70 @@ export function ClientePanel({
                     >
                       Ver todas / agregar nota →
                     </button>
+                  </Tarjeta>
+
+                  <Tarjeta titulo="Zona de peligro">
+                    {cliente.eliminadoEn ? (
+                      <p className="text-sm text-muted">
+                        Este cliente fue eliminado el{" "}
+                        {new Date(cliente.eliminadoEn).toLocaleString("es-MX", {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })}
+                        .
+                      </p>
+                    ) : pasoEliminar === 0 ? (
+                      <button
+                        onClick={confirmarEliminar}
+                        className="ease-spring flex items-center gap-1.5 rounded-lg border border-danger/40 px-3 py-1.5 text-xs font-medium text-danger transition hover:bg-danger/10"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+                        Eliminar cliente
+                      </button>
+                    ) : pasoEliminar === 1 ? (
+                      <div className="rounded-lg border border-danger/30 bg-danger/5 p-3">
+                        <p className="mb-2.5 text-xs text-foreground">
+                          Esto va a borrar de forma <strong>permanente</strong> el contacto en Kajabi, y va a
+                          archivar a {cliente.nombre} en el CRM (sale de la lista principal, pero su historial
+                          queda guardado en Eliminados). ¿Confirmas?
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setPasoEliminar(0)}
+                            className="ease-spring rounded-lg border border-silver px-3 py-1.5 text-xs font-medium text-muted transition hover:text-foreground"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={confirmarEliminar}
+                            className="ease-spring rounded-lg bg-danger px-3 py-1.5 text-xs font-medium text-white transition"
+                          >
+                            Sí, continuar
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-danger/30 bg-danger/5 p-3">
+                        <p className="mb-2.5 text-xs font-medium text-danger">
+                          Última confirmación — el borrado en Kajabi no se puede deshacer.
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setPasoEliminar(0)}
+                            className="ease-spring rounded-lg border border-silver px-3 py-1.5 text-xs font-medium text-muted transition hover:text-foreground"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={confirmarEliminar}
+                            disabled={eliminando}
+                            className="ease-spring rounded-lg bg-danger px-3 py-1.5 text-xs font-medium text-white transition disabled:opacity-50"
+                          >
+                            {eliminando ? "Eliminando…" : "Confirmar eliminación"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </Tarjeta>
                 </div>
               )}

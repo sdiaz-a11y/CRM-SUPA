@@ -204,3 +204,10 @@ create table if not exists kajabi_sync_estado (
   actualizado_en timestamptz not null default now()
 );
 alter table kajabi_sync_estado enable row level security;
+
+-- Archivado (no borrado real): al "eliminar" un cliente desde el CRM se
+-- borra de verdad en Kajabi, pero aquí solo se marca con la fecha — sale de
+-- la lista principal pero conserva su fila y su timeline completa para
+-- poder auditar quién lo eliminó y cuándo.
+alter table clientes add column if not exists eliminado_en timestamptz;
+create index if not exists idx_clientes_eliminado_en on clientes (eliminado_en);

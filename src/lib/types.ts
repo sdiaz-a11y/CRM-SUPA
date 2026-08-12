@@ -55,6 +55,11 @@ export type Cliente = {
   // Id del contacto en Kajabi, si ya se creó/vinculó ahí.
   kajabiContactId: string | null;
 
+  // Archivado (no borrado real): si tiene fecha, el cliente está en
+  // "Eliminados" — fuera de la lista principal, pero con su fila y timeline
+  // intactas.
+  eliminadoEn: string | null;
+
   creadoEn: string; // ISO
   actualizadoEn: string; // ISO
 };
@@ -67,7 +72,8 @@ export type TipoEvento =
   | "ACCESO_VIP"
   | "ACCESO_BLACK"
   | "IMPORTACION"
-  | "KAJABI";
+  | "KAJABI"
+  | "ELIMINADO";
 
 export type EventoTimeline = {
   id: string;

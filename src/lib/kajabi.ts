@@ -143,6 +143,15 @@ export async function altaEnKajabi(nombre: string, email: string): Promise<strin
   return contactId;
 }
 
+// Borrado real y permanente del contacto en Kajabi (usado por "Eliminar
+// cliente" del CRM). Si no existe, no hay nada que borrar. Kajabi rechaza
+// el borrado (422) si el contacto tiene una suscripción de pago activa.
+export async function eliminarContacto(email: string): Promise<void> {
+  const contactId = await buscarContactoPorCorreo(email);
+  if (!contactId) return;
+  await kajabiFetch(`/contacts/${contactId}`, { method: "DELETE" });
+}
+
 export type EstadoOferta = "activa" | "revocada" | "sin_contacto";
 
 type OfertasContacto = { data: { id: string }[] };

@@ -7,6 +7,7 @@ import {
   Gem,
   UploadCloud,
   Tag,
+  Trash2,
 } from "lucide-react";
 import type { EventoTimeline, TipoEvento } from "@/lib/types";
 
@@ -19,6 +20,7 @@ const ICONS: Record<TipoEvento, typeof UserPlus> = {
   ACCESO_BLACK: Gem,
   IMPORTACION: UploadCloud,
   KAJABI: Tag,
+  ELIMINADO: Trash2,
 };
 
 const LABEL: Record<TipoEvento, string> = {
@@ -30,6 +32,7 @@ const LABEL: Record<TipoEvento, string> = {
   ACCESO_BLACK: "Black Access",
   IMPORTACION: "Importado",
   KAJABI: "Kajabi",
+  ELIMINADO: "Cliente eliminado",
 };
 
 export function Timeline({ eventos }: { eventos: EventoTimeline[] }) {

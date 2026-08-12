@@ -58,6 +58,7 @@ export async function listarTodosClientes(): Promise<ClienteResumen[]> {
     supabase
       .from("clientes")
       .select("id,nombre,fecha_inscripcion,creado_en,acceso_plataforma,tipo_membresia,vencimiento_skool,accesos")
+      .is("eliminado_en", null)
       .range(from, to)
   );
   return filas.map((r) => ({
@@ -106,7 +107,7 @@ export async function listarClientes(opciones?: FiltrosClientes): Promise<{
   const ahora = new Date().toISOString();
   const vigencia = opciones?.vigencia ?? "actuales";
 
-  let query = supabase.from("clientes").select("*", { count: "exact" });
+  let query = supabase.from("clientes").select("*", { count: "exact" }).is("eliminado_en", null);
 
   const q = sanearBusqueda(opciones?.busqueda?.trim() ?? "");
   if (q) query = query.or(`nombre.ilike.%${q}%,email.ilike.%${q}%`);
@@ -700,4 +701,32 @@ export async function guardarCursorSyncKajabi(valor: string): Promise<void> {
     .from("kajabi_sync_estado")
     .upsert({ clave: CURSOR_SYNC_KAJABI, valor, actualizado_en: new Date().toISOString() });
   if (error) throw error;
+}
+
+// Archiva el cliente (no lo borra): sale de la lista principal pero
+// conserva su fila y su timeline completa, incluido este mismo evento, por
+// si hay que auditar quién lo eliminó y cuándo. El borrado real en Kajabi
+// se maneja aparte, en la ruta de la API.
+export async function eliminarCliente(id: string, autor: string): Promise<Cliente> {
+  const { data, error } = await supabase
+    .from("clientes")
+    .update({ eliminado_en: new Date().toISOString(), actualizado_en: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+
+  await registrarEvento(id, "ELIMINADO", `Cliente eliminado por ${autor}`, autor);
+  return filaACliente(data as ClienteRow);
+}
+
+export async function listarEliminados(busqueda?: string): Promise<Cliente[]> {
+  let query = supabase.from("clientes").select("*").not("eliminado_en", "is", null);
+  const q = sanearBusqueda(busqueda?.trim() ?? "");
+  if (q) query = query.or(`nombre.ilike.%${q}%,email.ilike.%${q}%`);
+  query = query.order("eliminado_en", { ascending: false }).limit(500);
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data as ClienteRow[]).map(filaACliente);
 }
