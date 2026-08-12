@@ -11,6 +11,7 @@ import {
   type RegionFiltro,
   type VigenciaFiltro,
 } from "@/lib/db";
+import { altaEnGhl } from "@/lib/ghl";
 import { altaEnKajabi, KAJABI_TAG_MIEMBRO_DEL_CLUB } from "@/lib/kajabi";
 import { invitarASkool } from "@/lib/skool";
 
@@ -95,7 +96,18 @@ export async function POST(req: NextRequest) {
       avisoSkool = err instanceof Error ? err.message : "No se pudo enviar la invitación a Skool";
     }
 
-    return NextResponse.json({ cliente, avisoKajabi, avisoSkool });
+    // Igual de resiliente: crea/actualiza el contacto en GHL y le pone el
+    // tag que dispara el Workflow de bienvenida por WhatsApp. El envío en sí
+    // lo hace ese Workflow (la API pública no puede disparar plantillas
+    // nativas de WhatsApp Business directamente).
+    let avisoGhl: string | null = null;
+    try {
+      await altaEnGhl(cliente.nombre, cliente.email, cliente.telefono);
+    } catch (err) {
+      avisoGhl = err instanceof Error ? err.message : "No se pudo dar de alta en GoHighLevel";
+    }
+
+    return NextResponse.json({ cliente, avisoKajabi, avisoSkool, avisoGhl });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido";
     return NextResponse.json({ error: message }, { status: 400 });
