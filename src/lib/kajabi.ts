@@ -143,6 +143,21 @@ export async function altaEnKajabi(nombre: string, email: string): Promise<strin
   return contactId;
 }
 
+export type EstadoOferta = "activa" | "revocada" | "sin_contacto";
+
+type OfertasContacto = { data: { id: string }[] };
+
+// Consulta en vivo si un contacto tiene la oferta activa ahora mismo — para
+// el botón "Renovar" del panel del cliente, que solo debe aparecer si en
+// Kajabi la oferta ya no está (sea porque alguien la revocó a mano o porque
+// venció el timer de acceso de 365 días que trae configurado el otorgamiento).
+export async function estadoOfertaContacto(email: string, offerId: string): Promise<EstadoOferta> {
+  const contactId = await buscarContactoPorCorreo(email);
+  if (!contactId) return "sin_contacto";
+  const data = (await kajabiFetch(`/contacts/${contactId}/relationships/offers`)) as OfertasContacto;
+  return data.data.some((o) => o.id === offerId) ? "activa" : "revocada";
+}
+
 // --- Sincronización por consulta periódica (reemplaza al webhook nativo,
 // cuyo permiso "Webhooks" no está disponible para esta API key) ---
 //

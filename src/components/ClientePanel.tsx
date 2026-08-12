@@ -27,6 +27,8 @@ import {
   StickyNote,
   Activity,
   Tags,
+  RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 import type { Accesos, Cliente, EventoTimeline } from "@/lib/types";
 import { useAutor } from "@/lib/autor-context";
@@ -58,7 +60,12 @@ type Form = {
   contactoWhats: string;
   llamada: string;
   notasSoporte: string;
+  finAcceso: string;
 };
+
+function isoAFechaInput(iso: string | null): string {
+  return iso ? iso.slice(0, 10) : "";
+}
 
 function formDeCliente(c: Cliente | null): Form {
   return {
@@ -76,8 +83,11 @@ function formDeCliente(c: Cliente | null): Form {
     contactoWhats: c?.contactoWhats ?? "",
     llamada: c?.llamada ?? "",
     notasSoporte: c?.notasSoporte ?? "",
+    finAcceso: isoAFechaInput(c?.finAcceso ?? null),
   };
 }
+
+type EstadoKajabi = "cargando" | "activa" | "revocada" | "sin_contacto" | "error";
 
 export function ClientePanel({
   clienteId,
@@ -103,6 +113,9 @@ export function ClientePanel({
   const [copiado, setCopiado] = useState<"email" | "telefono" | null>(null);
   const [tagsCatalogo, setTagsCatalogo] = useState<string[]>([]);
   const [guardandoTag, setGuardandoTag] = useState<string | null>(null);
+  const [estadoKajabi, setEstadoKajabi] = useState<EstadoKajabi>("cargando");
+  const [pasoRenovar, setPasoRenovar] = useState<0 | 1 | 2>(0);
+  const [renovando, setRenovando] = useState(false);
 
   useEffect(() => {
     fetch("/api/biblioteca?tipo=tag")
@@ -115,6 +128,8 @@ export function ClientePanel({
     let cancelado = false;
     setCargando(true);
     setTab("resumen");
+    setEstadoKajabi("cargando");
+    setPasoRenovar(0);
     Promise.all([
       fetch(`/api/clientes/${encodeURIComponent(clienteId)}`).then((r) => r.json()),
       fetch(`/api/clientes/${encodeURIComponent(clienteId)}/eventos`).then((r) => r.json()),
@@ -125,6 +140,14 @@ export function ClientePanel({
       setForm(formDeCliente(clienteRes.cliente));
       setCargando(false);
     });
+    fetch(`/api/clientes/${encodeURIComponent(clienteId)}/kajabi-estado`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelado) setEstadoKajabi(data.estado ?? "error");
+      })
+      .catch(() => {
+        if (!cancelado) setEstadoKajabi("error");
+      });
     return () => {
       cancelado = true;
     };
@@ -208,6 +231,42 @@ export function ClientePanel({
     }
     setCliente(data.cliente);
     onClienteActualizado(data.cliente);
+  }
+
+  async function confirmarRenovar() {
+    if (!cliente || !autor) return;
+    if (pasoRenovar < 2) {
+      setPasoRenovar((p) => (p + 1) as 0 | 1 | 2);
+      return;
+    }
+    setRenovando(true);
+    setError(null);
+    const res = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/renovar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ autor }),
+    });
+    const data = await res.json();
+    setRenovando(false);
+    setPasoRenovar(0);
+    if (!res.ok) {
+      setError(data.error ?? "No se pudo renovar la membresía");
+      return;
+    }
+    const avisos: string[] = [];
+    if (data.avisoKajabi) avisos.push(`Kajabi: ${data.avisoKajabi}`);
+    if (data.avisoSkool) avisos.push(`Skool: ${data.avisoSkool}`);
+    if (avisos.length) {
+      window.alert(`La membresía se renovó en el CRM, pero hubo problemas:\n\n${avisos.join("\n")}`);
+    }
+    setCliente(data.cliente);
+    setForm(formDeCliente(data.cliente));
+    onClienteActualizado(data.cliente);
+    setEstadoKajabi(data.avisoKajabi ? "revocada" : "activa");
+    const eventosRes = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/eventos`).then((r) =>
+      r.json()
+    );
+    setEventos(eventosRes.eventos ?? []);
   }
 
   async function toggleTag(tag: string, activo: boolean) {
@@ -536,6 +595,86 @@ export function ClientePanel({
 
               {tab === "accesos" && (
                 <div className="space-y-5">
+                  <Tarjeta titulo="Estado en Kajabi">
+                    {estadoKajabi === "cargando" && (
+                      <p className="text-sm text-muted">Consultando en Kajabi…</p>
+                    )}
+                    {estadoKajabi === "activa" && (
+                      <p className="flex items-center gap-1.5 text-sm text-success">
+                        <Check className="h-4 w-4" strokeWidth={2} />
+                        Oferta activa en Kajabi
+                      </p>
+                    )}
+                    {estadoKajabi === "sin_contacto" && (
+                      <p className="text-sm text-muted">Todavía no tiene contacto en Kajabi.</p>
+                    )}
+                    {estadoKajabi === "error" && (
+                      <p className="text-sm text-muted">No se pudo verificar el estado en Kajabi.</p>
+                    )}
+                    {estadoKajabi === "revocada" && (
+                      <div className="space-y-3">
+                        <p className="flex items-center gap-1.5 text-sm text-danger">
+                          <AlertTriangle className="h-4 w-4" strokeWidth={1.75} />
+                          La oferta ya no está activa en Kajabi.
+                        </p>
+                        {pasoRenovar === 0 && (
+                          <button
+                            onClick={confirmarRenovar}
+                            className="ease-spring flex items-center gap-1.5 rounded-lg brand-plate px-3 py-1.5 text-xs font-medium text-white transition"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.75} />
+                            Renovar membresía
+                          </button>
+                        )}
+                        {pasoRenovar === 1 && (
+                          <div className="rounded-lg border border-danger/30 bg-danger/5 p-3">
+                            <p className="mb-2.5 text-xs text-foreground">
+                              Esto va a otorgar la oferta en Kajabi, reenviar la invitación de Skool, poner la
+                              etiqueta &quot;Renovación&quot; y actualizar Fin de acceso a un año desde hoy.
+                              ¿Confirmas?
+                            </p>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => setPasoRenovar(0)}
+                                className="ease-spring rounded-lg border border-silver px-3 py-1.5 text-xs font-medium text-muted transition hover:text-foreground"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                onClick={confirmarRenovar}
+                                className="ease-spring rounded-lg bg-danger px-3 py-1.5 text-xs font-medium text-white transition"
+                              >
+                                Sí, continuar
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {pasoRenovar === 2 && (
+                          <div className="rounded-lg border border-danger/30 bg-danger/5 p-3">
+                            <p className="mb-2.5 text-xs font-medium text-danger">
+                              Última confirmación — esta acción no se puede deshacer fácilmente.
+                            </p>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => setPasoRenovar(0)}
+                                className="ease-spring rounded-lg border border-silver px-3 py-1.5 text-xs font-medium text-muted transition hover:text-foreground"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                onClick={confirmarRenovar}
+                                disabled={renovando}
+                                className="ease-spring rounded-lg bg-danger px-3 py-1.5 text-xs font-medium text-white transition disabled:opacity-50"
+                              >
+                                {renovando ? "Renovando…" : "Confirmar renovación"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </Tarjeta>
+
                   <Tarjeta titulo="Accesos a Synergy Unlimited">
                     <AccesosSynergy
                       accesos={cliente.accesos}
@@ -548,14 +687,30 @@ export function ClientePanel({
 
                   <Tarjeta titulo="Acceso a plataforma (histórico)">
                     {!editando ? (
-                      <CampoValor label="Registrado en el CSV de origen" valor={cliente.accesoPlataforma} />
-                    ) : (
-                      <Campo label="Acceso a plataforma">
-                        <Input
-                          value={form.accesoPlataforma}
-                          onChange={(v) => setForm((f) => ({ ...f, accesoPlataforma: v }))}
+                      <dl className="space-y-2.5 text-sm">
+                        <CampoValor label="Registrado en el CSV de origen" valor={cliente.accesoPlataforma} />
+                        <CampoValor
+                          label="Fin de acceso"
+                          valor={cliente.finAcceso ? new Date(cliente.finAcceso).toLocaleDateString("es-MX") : null}
                         />
-                      </Campo>
+                      </dl>
+                    ) : (
+                      <div className="space-y-3">
+                        <Campo label="Acceso a plataforma">
+                          <Input
+                            value={form.accesoPlataforma}
+                            onChange={(v) => setForm((f) => ({ ...f, accesoPlataforma: v }))}
+                          />
+                        </Campo>
+                        <Campo label="Fin de acceso">
+                          <input
+                            type="date"
+                            value={form.finAcceso}
+                            onChange={(e) => setForm((f) => ({ ...f, finAcceso: e.target.value }))}
+                            className="w-full rounded-lg border border-silver bg-surface-2 px-3 py-1.5 text-sm outline-none ring-primary/30 focus:ring-2"
+                          />
+                        </Campo>
+                      </div>
                     )}
                   </Tarjeta>
                 </div>

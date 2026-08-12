@@ -296,8 +296,10 @@ export async function recalcularAccesos(id: string): Promise<Cliente> {
 
 // Se llama tras un envío exitoso de la invitación a Skool: marca el campo
 // (ya existente, traído del CSV de origen) y calcula el vencimiento a
-// partir de la fecha de inscripción + duración de la membresía.
-export async function marcarInvitacionSkoolEnviada(id: string): Promise<Cliente> {
+// partir de una fecha ancla + duración de la membresía. `fechaAncla` es la
+// fecha de inscripción en el alta normal, o el momento de la renovación
+// cuando se llama desde `renovarMembresia`.
+export async function marcarInvitacionSkoolEnviada(id: string, fechaAncla?: string): Promise<Cliente> {
   const { data: fila, error: errLectura } = await supabase
     .from("clientes")
     .select("fecha_inscripcion,tipo_membresia")
@@ -306,9 +308,8 @@ export async function marcarInvitacionSkoolEnviada(id: string): Promise<Cliente>
   if (errLectura) throw errLectura;
   if (!fila) throw new Error("Cliente no encontrado");
 
-  const vencimiento = fila.fecha_inscripcion
-    ? calcularVencimientoSkool(fila.fecha_inscripcion, fila.tipo_membresia)
-    : null;
+  const ancla = fechaAncla ?? fila.fecha_inscripcion;
+  const vencimiento = ancla ? calcularVencimientoSkool(ancla, fila.tipo_membresia) : null;
 
   const { data, error } = await supabase
     .from("clientes")
@@ -322,6 +323,36 @@ export async function marcarInvitacionSkoolEnviada(id: string): Promise<Cliente>
     .select("*")
     .single();
   if (error) throw error;
+  return filaACliente(data as ClienteRow);
+}
+
+function finDeAccesoDentroDeUnAnio(): string {
+  const ahora = new Date();
+  return new Date(Date.UTC(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() + 365)).toISOString();
+}
+
+// Renovación de membresía (botón "Renovar" en el perfil, solo visible si en
+// Kajabi la oferta ya no está activa). Section 4 de REGLAS-BOLETOS-
+// SYNERGY.md: el motor de accesos usa "Renov" en Acceso a plataforma —no la
+// etiqueta— para aplicar la regla fija por país (2 Generales MX, etc.) en
+// vez de la tabla de inventario por evento.
+export async function renovarMembresia(id: string, autor: string): Promise<Cliente> {
+  const finAcceso = finDeAccesoDentroDeUnAnio();
+  const { data, error } = await supabase
+    .from("clientes")
+    .update({
+      etiqueta: "Renovacion",
+      tipo_membresia: "12 Meses",
+      acceso_plataforma: "Renovación",
+      fin_acceso: finAcceso,
+      actualizado_en: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+
+  await registrarEvento(id, "EDICION", `Membresía renovada — Fin de acceso: ${formatearFechaSkool(new Date(finAcceso))}`, autor);
   return filaACliente(data as ClienteRow);
 }
 
@@ -355,6 +386,8 @@ type CambiosDatosCliente = {
   contactoWhats?: string | null;
   llamada?: string | null;
   notasSoporte?: string | null;
+  // "YYYY-MM-DD" (input type=date) o null/vacío para limpiarla.
+  finAcceso?: string | null;
 };
 
 export async function actualizarDatosCliente(
@@ -387,19 +420,47 @@ export async function actualizarDatosCliente(
     notasSoporte: cambios.notasSoporte?.trim() || "—",
   };
 
-  const detalle = CAMPOS_EDITABLES.map(({ key, label }) => ({
+  const detalleTextos = CAMPOS_EDITABLES.map(({ key, label }) => ({
     label,
     anterior: (anterior[key as keyof Cliente] as string | null) ?? "—",
     nuevo: nuevos[key],
   }))
     .filter((c) => c.anterior !== c.nuevo)
-    .map((c) => `${c.label}: "${c.anterior}" → "${c.nuevo}"`)
-    .join(" · ");
+    .map((c) => `${c.label}: "${c.anterior}" → "${c.nuevo}"`);
 
   const nuevoEvento = cambios.evento?.trim() || null;
   const nuevoPais = cambios.pais?.trim() || null;
   const region = await regionParaCrearOEditar(nuevoEvento, nuevoPais);
-  const vencimientoSkoolFecha = fechaSkoolADateOnly(parsearFechaSkool(cambios.vencimientoSkool?.trim() || null));
+
+  // Si cambia el tipo de membresía, el vencimiento de Skool se recalcula
+  // desde la fecha de inscripción — ignora lo que se haya escrito a mano en
+  // ese mismo guardado, para no dejar una fecha inconsistente con la nueva
+  // duración.
+  const nuevaMembresia = cambios.tipoMembresia?.trim() || null;
+  const membresiaCambio = nuevaMembresia !== anterior.tipoMembresia;
+
+  let vencimientoSkoolTexto = cambios.vencimientoSkool?.trim() || null;
+  let vencimientoSkoolFecha = fechaSkoolADateOnly(parsearFechaSkool(vencimientoSkoolTexto));
+  if (membresiaCambio && anterior.fechaInscripcion) {
+    const recalculado = calcularVencimientoSkool(anterior.fechaInscripcion, nuevaMembresia);
+    vencimientoSkoolTexto = recalculado ? formatearFechaSkool(recalculado) : null;
+    vencimientoSkoolFecha = fechaSkoolADateOnly(recalculado);
+  }
+
+  const finAccesoNuevo = cambios.finAcceso?.trim() ? new Date(cambios.finAcceso.trim()).toISOString() : null;
+  const finAccesoCambio = finAccesoNuevo !== anterior.finAcceso;
+
+  const detalle = [
+    ...detalleTextos,
+    membresiaCambio
+      ? `Vencimiento Skool recalculado: "${anterior.vencimientoSkool ?? "—"}" → "${vencimientoSkoolTexto ?? "—"}"`
+      : null,
+    finAccesoCambio
+      ? `Fin de acceso: "${anterior.finAcceso ? formatearFechaSkool(new Date(anterior.finAcceso)) : "—"}" → "${finAccesoNuevo ? formatearFechaSkool(new Date(finAccesoNuevo)) : "—"}"`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const { data, error } = await supabase
     .from("clientes")
@@ -411,13 +472,14 @@ export async function actualizarDatosCliente(
       notas: cambios.notas?.trim() || null,
       evento: nuevoEvento,
       acceso_plataforma: cambios.accesoPlataforma?.trim() || null,
-      tipo_membresia: cambios.tipoMembresia?.trim() || null,
-      vencimiento_skool: cambios.vencimientoSkool?.trim() || null,
+      tipo_membresia: nuevaMembresia,
+      vencimiento_skool: vencimientoSkoolTexto,
       vencimiento_skool_fecha: vencimientoSkoolFecha,
       invitacion_skool: cambios.invitacionSkool?.trim() || null,
       contacto_whats: cambios.contactoWhats?.trim() || null,
       llamada: cambios.llamada?.trim() || null,
       notas_soporte: cambios.notasSoporte?.trim() || null,
+      fin_acceso: finAccesoNuevo,
       region,
       actualizado_en: new Date().toISOString(),
     })
@@ -429,7 +491,12 @@ export async function actualizarDatosCliente(
   if (detalle) {
     await registrarEvento(id, "EDICION", detalle, autor);
   }
-  return filaACliente(data as ClienteRow);
+
+  let clienteFinal = filaACliente(data as ClienteRow);
+  if (membresiaCambio) {
+    clienteFinal = await recalcularAccesos(id);
+  }
+  return clienteFinal;
 }
 
 const ACCESO_LABEL: Record<keyof Accesos, string> = {

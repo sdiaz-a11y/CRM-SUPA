@@ -55,6 +55,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           contactoWhats: body.contactoWhats,
           llamada: body.llamada,
           notasSoporte: body.notasSoporte,
+          finAcceso: body.finAcceso,
         },
         body.autor
       );

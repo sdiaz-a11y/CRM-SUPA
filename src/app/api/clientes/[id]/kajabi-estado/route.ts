@@ -1,0 +1,17 @@
+import { NextRequest, NextResponse } from "next/server";
+import { obtenerCliente } from "@/lib/db";
+import { estadoOfertaContacto, KAJABI_OFFER_ID_CLUB_SINERGETICO } from "@/lib/kajabi";
+
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const cliente = await obtenerCliente(decodeURIComponent(id));
+  if (!cliente) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+
+  try {
+    const estado = await estadoOfertaContacto(cliente.email, KAJABI_OFFER_ID_CLUB_SINERGETICO);
+    return NextResponse.json({ estado });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Error desconocido";
+    return NextResponse.json({ estado: "error", error: message });
+  }
+}
