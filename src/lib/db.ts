@@ -10,6 +10,16 @@ export function normalizarEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+// Los CSV masivos suelen traer el teléfono como "525512345678" (lada +
+// número, sin el "+"). Se antepone si falta para que quede en formato E.164
+// — lo necesitan tanto el envío de WhatsApp por GHL como los links de
+// wa.me/tel: del panel del cliente.
+function normalizarTelefono(telefono?: string | null): string | null {
+  const limpio = telefono?.trim();
+  if (!limpio) return null;
+  return limpio.startsWith("+") ? limpio : `+${limpio}`;
+}
+
 async function registrarEvento(
   clienteId: string,
   tipo: TipoEvento,
@@ -225,7 +235,7 @@ export async function crearCliente(input: {
       id,
       nombre: input.nombre.trim(),
       email: id,
-      telefono: input.telefono?.trim() || null,
+      telefono: normalizarTelefono(input.telefono),
       pais: input.pais?.trim() || null,
       ciudad: input.ciudad?.trim() || null,
       notas: input.notas?.trim() || null,
@@ -407,7 +417,7 @@ export async function actualizarDatosCliente(
 
   const nuevos: Record<string, string> = {
     nombre: cambios.nombre.trim(),
-    telefono: cambios.telefono?.trim() || "—",
+    telefono: normalizarTelefono(cambios.telefono) ?? "—",
     pais: cambios.pais?.trim() || "—",
     ciudad: cambios.ciudad?.trim() || "—",
     notas: cambios.notas?.trim() || "—",
@@ -467,7 +477,7 @@ export async function actualizarDatosCliente(
     .from("clientes")
     .update({
       nombre: cambios.nombre.trim(),
-      telefono: cambios.telefono?.trim() || null,
+      telefono: normalizarTelefono(cambios.telefono),
       pais: nuevoPais,
       ciudad: cambios.ciudad?.trim() || null,
       notas: cambios.notas?.trim() || null,
