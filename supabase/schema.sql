@@ -211,3 +211,23 @@ alter table kajabi_sync_estado enable row level security;
 -- poder auditar quién lo eliminó y cuándo.
 alter table clientes add column if not exists eliminado_en timestamptz;
 create index if not exists idx_clientes_eliminado_en on clientes (eliminado_en);
+
+-- Autenticación propia del CRM (no Supabase Auth): usuarios internos con
+-- contraseña propia (bcrypt) y rol fijo (admin/coordinador/abeja). El
+-- login/JWT se maneja en la app (src/lib/auth.ts) — esta tabla es la única
+-- fuente de verdad de credenciales y permisos.
+create table if not exists usuarios (
+  id uuid primary key default gen_random_uuid(),
+  email text not null unique, -- normalizado (lowercase/trim) por la app, igual que clientes.id
+  nombre text not null, -- se usa como "autor" en eventos_timeline
+  password_hash text not null,
+  rol text not null check (rol in ('admin', 'coordinador', 'abeja')),
+  activo boolean not null default true,
+  -- Se incrementa en cada cambio de rol/activo/password: invalida de
+  -- inmediato cualquier sesión (JWT) ya emitida para este usuario.
+  token_version integer not null default 1,
+  creado_en timestamptz not null default now(),
+  actualizado_en timestamptz not null default now(),
+  ultimo_login timestamptz
+);
+alter table usuarios enable row level security;

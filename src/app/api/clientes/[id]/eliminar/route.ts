@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requerirPermiso } from "@/lib/auth";
 import { eliminarCliente, obtenerCliente } from "@/lib/db";
 import { eliminarContacto } from "@/lib/kajabi";
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const permiso = await requerirPermiso("eliminarCliente");
+  if (!permiso.ok) return permiso.respuesta;
+
   const { id } = await params;
   const clienteId = decodeURIComponent(id);
-  const body = await req.json();
-  if (!body?.autor?.trim()) {
-    return NextResponse.json({ error: "Falta el nombre de quien registra" }, { status: 400 });
-  }
 
   const cliente = await obtenerCliente(clienteId);
   if (!cliente) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   try {
-    const clienteEliminado = await eliminarCliente(clienteId, body.autor);
+    const clienteEliminado = await eliminarCliente(clienteId, permiso.usuario.nombre);
     return NextResponse.json({ cliente: clienteEliminado, avisoKajabi });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Search,
   Plus,
@@ -12,11 +12,15 @@ import {
   ChevronDown,
   Check,
   Upload,
+  Download,
 } from "lucide-react";
 import type { Cliente } from "@/lib/types";
 import { ClientePanel } from "@/components/ClientePanel";
 import { NuevoClienteModal } from "@/components/NuevoClienteModal";
 import { ImportarClientesModal } from "@/components/ImportarClientesModal";
+import { useSesion } from "@/lib/session-context";
+import { tienePermiso } from "@/lib/permisos";
+import { descargarCsv } from "@/lib/csv";
 
 const LIMITE = 100;
 
@@ -36,6 +40,11 @@ const FILTROS_VACIOS = {
 };
 
 export default function ClientesPage() {
+  const { usuario } = useSesion();
+  const puedeCrear = !!usuario && tienePermiso(usuario.rol, "crearCliente");
+  const puedeImportar = !!usuario && tienePermiso(usuario.rol, "importarCsv");
+  const puedeExportar = !!usuario && tienePermiso(usuario.rol, "exportarCsv");
+
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [total, setTotal] = useState(0);
   const [cargando, setCargando] = useState(true);
@@ -44,6 +53,7 @@ export default function ClientesPage() {
   const [seleccionado, setSeleccionado] = useState<string | null>(null);
   const [mostrarNuevo, setMostrarNuevo] = useState(false);
   const [mostrarImportar, setMostrarImportar] = useState(false);
+  const [descargando, setDescargando] = useState(false);
   const [recargaKey, setRecargaKey] = useState(0);
   const [filtros, setFiltros] = useState(FILTROS_VACIOS);
   const [opciones, setOpciones] = useState<{ eventos: string[]; membresias: string[] }>({
@@ -62,20 +72,29 @@ export default function ClientesPage() {
     setPagina(1);
   }, [busqueda, filtros]);
 
+  // Arma la querystring de filtros/búsqueda actuales — se comparte entre el
+  // fetch de la lista (paginado) y la exportación a CSV (trae todo).
+  const paramsFiltros = useCallback((): URLSearchParams => {
+    const params = new URLSearchParams();
+    if (busqueda.trim()) params.set("q", busqueda.trim());
+    if (filtros.estado !== "todos") params.set("estado", filtros.estado);
+    if (filtros.region !== "todos") params.set("region", filtros.region);
+    if (filtros.vigencia !== "actuales") params.set("vigencia", filtros.vigencia);
+    if (filtros.eventos.length) params.set("eventos", filtros.eventos.join(","));
+    if (filtros.membresias.length) params.set("membresias", filtros.membresias.join(","));
+    if (filtros.desde) params.set("desde", filtros.desde);
+    if (filtros.hasta) params.set("hasta", filtros.hasta);
+    if (filtros.vencidosAntesDe) params.set("vencidosAntesDe", filtros.vencidosAntesDe);
+    return params;
+  }, [busqueda, filtros]);
+
   useEffect(() => {
     setCargando(true);
     const controlador = new AbortController();
     const timeout = setTimeout(() => {
-      const params = new URLSearchParams({ limite: String(LIMITE), pagina: String(pagina) });
-      if (busqueda.trim()) params.set("q", busqueda.trim());
-      if (filtros.estado !== "todos") params.set("estado", filtros.estado);
-      if (filtros.region !== "todos") params.set("region", filtros.region);
-      if (filtros.vigencia !== "actuales") params.set("vigencia", filtros.vigencia);
-      if (filtros.eventos.length) params.set("eventos", filtros.eventos.join(","));
-      if (filtros.membresias.length) params.set("membresias", filtros.membresias.join(","));
-      if (filtros.desde) params.set("desde", filtros.desde);
-      if (filtros.hasta) params.set("hasta", filtros.hasta);
-      if (filtros.vencidosAntesDe) params.set("vencidosAntesDe", filtros.vencidosAntesDe);
+      const params = paramsFiltros();
+      params.set("limite", String(LIMITE));
+      params.set("pagina", String(pagina));
       fetch(`/api/clientes?${params}`, { signal: controlador.signal })
         .then((r) => r.json())
         .then((data) => {
@@ -89,7 +108,34 @@ export default function ClientesPage() {
       clearTimeout(timeout);
       controlador.abort();
     };
-  }, [busqueda, pagina, filtros, recargaKey]);
+  }, [paramsFiltros, pagina, recargaKey]);
+
+  async function descargarClientes(conFiltros: boolean) {
+    setDescargando(true);
+    try {
+      const params = conFiltros ? paramsFiltros() : new URLSearchParams();
+      const res = await fetch(`/api/clientes/exportar?${params}`);
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error ?? "No se pudo exportar la lista de clientes");
+        return;
+      }
+      const encabezados = ["Nombre", "Correo", "Teléfono", "País", "Evento", "Acceso", "Membresía", "Vence Skool"];
+      const filas = (data.clientes as Cliente[]).map((c) => [
+        c.nombre,
+        c.email,
+        c.telefono ?? "",
+        c.pais ?? "",
+        c.evento ?? "",
+        c.accesoPlataforma ?? "",
+        c.tipoMembresia ?? "",
+        c.vencimientoSkool ?? "",
+      ]);
+      descargarCsv(conFiltros ? "clientes-filtrados.csv" : "clientes.csv", encabezados, filas);
+    } finally {
+      setDescargando(false);
+    }
+  }
 
   function actualizarEnLista(cliente: Cliente) {
     setClientes((prev) => prev.map((c) => (c.id === cliente.id ? cliente : c)));
@@ -109,6 +155,7 @@ export default function ClientesPage() {
     !!filtros.desde ||
     !!filtros.hasta ||
     !!filtros.vencidosAntesDe;
+  const hayFiltrosOBusqueda = hayFiltrosActivos || !!busqueda.trim();
 
   const totalPaginas = Math.max(1, Math.ceil(total / LIMITE));
   const inicio = total === 0 ? 0 : (pagina - 1) * LIMITE + 1;
@@ -122,20 +169,47 @@ export default function ClientesPage() {
           <p className="text-sm text-muted">{total.toLocaleString("es-MX")} clientes registrados</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setMostrarImportar(true)}
-            className="ease-spring flex items-center gap-2 rounded-xl border border-silver bg-surface px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-surface-2"
-          >
-            <Upload className="h-4 w-4" strokeWidth={2} />
-            Importar CSV
-          </button>
-          <button
-            onClick={() => setMostrarNuevo(true)}
-            className="ease-spring flex items-center gap-2 rounded-xl brand-plate px-4 py-2.5 text-sm font-medium text-white transition"
-          >
-            <Plus className="h-4 w-4" strokeWidth={2} />
-            Nuevo cliente
-          </button>
+          {puedeExportar && (
+            <>
+              <button
+                onClick={() => descargarClientes(true)}
+                disabled={descargando}
+                title={hayFiltrosOBusqueda ? "Descarga solo lo que ves con los filtros/búsqueda actuales" : "Descarga la lista completa de clientes"}
+                className="ease-spring flex items-center gap-2 rounded-xl border border-silver bg-surface px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-surface-2 disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" strokeWidth={2} />
+                {descargando ? "Descargando…" : hayFiltrosOBusqueda ? "Descargar CSV (con filtros)" : "Descargar CSV"}
+              </button>
+              {hayFiltrosOBusqueda && (
+                <button
+                  onClick={() => descargarClientes(false)}
+                  disabled={descargando}
+                  title="Descarga todos los clientes, ignorando los filtros/búsqueda actuales"
+                  className="ease-spring flex items-center gap-2 rounded-xl border border-silver bg-surface px-3 py-2.5 text-xs font-medium text-muted transition hover:bg-surface-2 disabled:opacity-50"
+                >
+                  Descargar todo
+                </button>
+              )}
+            </>
+          )}
+          {puedeImportar && (
+            <button
+              onClick={() => setMostrarImportar(true)}
+              className="ease-spring flex items-center gap-2 rounded-xl border border-silver bg-surface px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-surface-2"
+            >
+              <Upload className="h-4 w-4" strokeWidth={2} />
+              Importar CSV
+            </button>
+          )}
+          {puedeCrear && (
+            <button
+              onClick={() => setMostrarNuevo(true)}
+              className="ease-spring flex items-center gap-2 rounded-xl brand-plate px-4 py-2.5 text-sm font-medium text-white transition"
+            >
+              <Plus className="h-4 w-4" strokeWidth={2} />
+              Nuevo cliente
+            </button>
+          )}
         </div>
       </div>
 

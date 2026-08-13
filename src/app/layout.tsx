@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { AutorProvider } from "@/lib/autor-context";
-import { AutorGate } from "@/components/AutorGate";
+import { SessionProvider } from "@/lib/session-context";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,9 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es">
       <body className={`${geistSans.variable} ${geistMono.variable} noise antialiased`}>
-        <AutorProvider>
-          <AutorGate>{children}</AutorGate>
-        </AutorProvider>
+        <SessionProvider>{children}</SessionProvider>
       </body>
     </html>
   );

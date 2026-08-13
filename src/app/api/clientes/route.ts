@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requerirPermiso } from "@/lib/auth";
 import {
   crearCliente,
   listarClientes,
@@ -16,6 +17,9 @@ import { altaEnKajabi, KAJABI_TAG_MIEMBRO_DEL_CLUB } from "@/lib/kajabi";
 import { invitarASkool } from "@/lib/skool";
 
 export async function GET(req: NextRequest) {
+  const permiso = await requerirPermiso("verClientes");
+  if (!permiso.ok) return permiso.respuesta;
+
   const { searchParams } = new URL(req.url);
   const busqueda = searchParams.get("q") ?? undefined;
   const limite = Number(searchParams.get("limite") ?? 100);
@@ -45,10 +49,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const permiso = await requerirPermiso("crearCliente");
+  if (!permiso.ok) return permiso.respuesta;
+
   const body = await req.json();
-  if (!body?.autor?.trim()) {
-    return NextResponse.json({ error: "Falta el nombre de quien registra" }, { status: 400 });
-  }
   if (!body?.email?.trim() || !body?.nombre?.trim()) {
     return NextResponse.json({ error: "Nombre y correo son obligatorios" }, { status: 400 });
   }
@@ -61,7 +65,7 @@ export async function POST(req: NextRequest) {
       evento: body.evento,
       tipoMembresia: body.tipoMembresia,
       etiqueta: body.etiqueta,
-      autor: body.autor,
+      autor: permiso.usuario.nombre,
     });
 
     // El alta en Kajabi es un efecto secundario del alta en el CRM: si

@@ -32,7 +32,8 @@ import {
   Trash2,
 } from "lucide-react";
 import type { Accesos, Cliente, EventoTimeline } from "@/lib/types";
-import { useAutor } from "@/lib/autor-context";
+import { useSesion } from "@/lib/session-context";
+import { tienePermiso } from "@/lib/permisos";
 import { AccesosSynergy } from "./AccesosSynergy";
 import { Timeline } from "./Timeline";
 
@@ -101,7 +102,12 @@ export function ClientePanel({
   onClienteActualizado: (cliente: Cliente) => void;
   onClienteEliminado?: (id: string) => void;
 }) {
-  const { autor } = useAutor();
+  const { usuario } = useSesion();
+  const puedeEditar = !!usuario && tienePermiso(usuario.rol, "editarCliente");
+  const puedeEditarAccesos = !!usuario && tienePermiso(usuario.rol, "editarAccesos");
+  const puedeAgregarNota = !!usuario && tienePermiso(usuario.rol, "agregarNota");
+  const puedeEliminar = !!usuario && tienePermiso(usuario.rol, "eliminarCliente");
+  const puedeRenovar = !!usuario && tienePermiso(usuario.rol, "renovarMembresia");
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [eventos, setEventos] = useState<EventoTimeline[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -168,13 +174,13 @@ export function ClientePanel({
   }, [onClose]);
 
   async function guardar() {
-    if (!cliente || !autor) return;
+    if (!cliente || !puedeEditar) return;
     setGuardando(true);
     setError(null);
     const res = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tipo: "datos", ...form, autor }),
+      body: JSON.stringify({ tipo: "datos", ...form }),
     });
     const data = await res.json();
     setGuardando(false);
@@ -197,13 +203,13 @@ export function ClientePanel({
   }
 
   async function toggleAcceso(nivel: keyof Accesos, activo: boolean) {
-    if (!cliente || !autor) return;
+    if (!cliente || !puedeEditarAccesos) return;
     setAccesoPendiente(nivel);
     setError(null);
     const res = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tipo: "acceso", nivel, activo, autor }),
+      body: JSON.stringify({ tipo: "acceso", nivel, activo }),
     });
     const data = await res.json();
     setAccesoPendiente(null);
@@ -223,12 +229,12 @@ export function ClientePanel({
     nivel: keyof Accesos,
     cambios: { cantidad?: number; variante?: Accesos["general"]["variante"] }
   ) {
-    if (!cliente || !autor) return;
+    if (!cliente || !puedeEditarAccesos) return;
     setError(null);
     const res = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tipo: "acceso-detalle", nivel, ...cambios, autor }),
+      body: JSON.stringify({ tipo: "acceso-detalle", nivel, ...cambios }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -240,7 +246,7 @@ export function ClientePanel({
   }
 
   async function confirmarRenovar() {
-    if (!cliente || !autor) return;
+    if (!cliente || !puedeRenovar) return;
     if (pasoRenovar < 2) {
       setPasoRenovar((p) => (p + 1) as 0 | 1 | 2);
       return;
@@ -249,8 +255,6 @@ export function ClientePanel({
     setError(null);
     const res = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/renovar`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ autor }),
     });
     const data = await res.json();
     setRenovando(false);
@@ -276,7 +280,7 @@ export function ClientePanel({
   }
 
   async function confirmarEliminar() {
-    if (!cliente || !autor) return;
+    if (!cliente || !puedeEliminar) return;
     if (pasoEliminar < 2) {
       setPasoEliminar((p) => (p + 1) as 0 | 1 | 2);
       return;
@@ -285,8 +289,6 @@ export function ClientePanel({
     setError(null);
     const res = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/eliminar`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ autor }),
     });
     const data = await res.json();
     setEliminando(false);
@@ -305,14 +307,14 @@ export function ClientePanel({
   }
 
   async function toggleTag(tag: string, activo: boolean) {
-    if (!cliente || !autor) return;
+    if (!cliente || !puedeEditar) return;
     const nuevos = activo ? [...cliente.tags, tag] : cliente.tags.filter((t) => t !== tag);
     setGuardandoTag(tag);
     setError(null);
     const res = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tipo: "tags", tags: nuevos, autor }),
+      body: JSON.stringify({ tipo: "tags", tags: nuevos }),
     });
     const data = await res.json();
     setGuardandoTag(null);
@@ -329,13 +331,13 @@ export function ClientePanel({
   }
 
   async function enviarNota() {
-    if (!cliente || !autor || !nota.trim()) return;
+    if (!cliente || !puedeAgregarNota || !nota.trim()) return;
     setEnviandoNota(true);
     setError(null);
     const res = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/eventos`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nota, autor }),
+      body: JSON.stringify({ nota }),
     });
     const data = await res.json();
     setEnviandoNota(false);
@@ -454,7 +456,7 @@ export function ClientePanel({
                     </a>
                   </>
                 )}
-                {!editando ? (
+                {!puedeEditar ? null : !editando ? (
                   <button
                     onClick={() => setEditando(true)}
                     className="ease-spring ml-auto flex items-center gap-1.5 rounded-lg bg-white/15 px-2.5 py-1.5 text-xs font-medium transition hover:bg-white/25"
@@ -525,7 +527,7 @@ export function ClientePanel({
                       onClick={() => setTab("accesos")}
                       className="ease-spring mt-2.5 text-xs font-medium text-primary transition hover:text-primary-deep"
                     >
-                      Editar accesos →
+                      {puedeEditarAccesos ? "Editar accesos →" : "Ver accesos →"}
                     </button>
                   </Tarjeta>
 
@@ -542,8 +544,8 @@ export function ClientePanel({
                             <button
                               key={tag}
                               onClick={() => toggleTag(tag, !activo)}
-                              disabled={guardandoTag === tag}
-                              className={`ease-spring flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition disabled:opacity-50 ${
+                              disabled={!puedeEditar || guardandoTag === tag}
+                              className={`ease-spring flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition disabled:cursor-default disabled:opacity-50 ${
                                 activo
                                   ? "brand-plate text-white"
                                   : "border border-silver text-muted hover:text-foreground"
@@ -626,6 +628,7 @@ export function ClientePanel({
                     </button>
                   </Tarjeta>
 
+                  {puedeEliminar && (
                   <Tarjeta titulo="Zona de peligro">
                     {cliente.eliminadoEn ? (
                       <p className="text-sm text-muted">
@@ -689,6 +692,7 @@ export function ClientePanel({
                       </div>
                     )}
                   </Tarjeta>
+                  )}
                 </div>
               )}
 
@@ -716,7 +720,7 @@ export function ClientePanel({
                           <AlertTriangle className="h-4 w-4" strokeWidth={1.75} />
                           La oferta ya no está activa en Kajabi.
                         </p>
-                        {pasoRenovar === 0 && (
+                        {!puedeRenovar ? null : pasoRenovar === 0 && (
                           <button
                             onClick={confirmarRenovar}
                             className="ease-spring flex items-center gap-1.5 rounded-lg brand-plate px-3 py-1.5 text-xs font-medium text-white transition"
@@ -779,8 +783,9 @@ export function ClientePanel({
                       accesos={cliente.accesos}
                       pendiente={accesoPendiente}
                       onToggle={toggleAcceso}
-                      editando={editando}
+                      editando={editando && puedeEditarAccesos}
                       onCambiarDetalle={cambiarDetalleAcceso}
+                      soloLectura={!puedeEditarAccesos}
                     />
                   </Tarjeta>
 
@@ -890,6 +895,7 @@ export function ClientePanel({
 
               {tab === "notas" && (
                 <div className="space-y-5">
+                  {puedeAgregarNota && (
                   <Tarjeta titulo="Agregar nota">
                     <div className="flex gap-2">
                       <input
@@ -908,6 +914,7 @@ export function ClientePanel({
                       </button>
                     </div>
                   </Tarjeta>
+                  )}
 
                   <Tarjeta titulo="Notas generales">
                     {!editando ? (
@@ -956,6 +963,7 @@ export function ClientePanel({
 
               {tab === "actividad" && (
                 <div>
+                  {puedeAgregarNota && (
                   <div className="mb-4 flex gap-2">
                     <input
                       value={nota}
@@ -972,6 +980,7 @@ export function ClientePanel({
                       <Send className="h-4 w-4" strokeWidth={1.75} />
                     </button>
                   </div>
+                  )}
                   <Timeline eventos={eventos} />
                 </div>
               )}

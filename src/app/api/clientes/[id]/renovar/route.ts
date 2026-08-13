@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requerirPermiso } from "@/lib/auth";
 import {
   marcarInvitacionSkoolEnviada,
   recalcularAccesos,
@@ -9,18 +10,17 @@ import {
 import { altaEnKajabi, KAJABI_TAG_MIEMBRO_DEL_CLUB } from "@/lib/kajabi";
 import { invitarASkool } from "@/lib/skool";
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const permiso = await requerirPermiso("renovarMembresia");
+  if (!permiso.ok) return permiso.respuesta;
+
   const { id } = await params;
   const clienteId = decodeURIComponent(id);
-  const body = await req.json();
-  if (!body?.autor?.trim()) {
-    return NextResponse.json({ error: "Falta el nombre de quien registra" }, { status: 400 });
-  }
 
   try {
     // Campos propios del CRM (etiqueta, tipo de membresía, acceso a
     // plataforma, fin de acceso) — no depende de que Kajabi/Skool respondan.
-    let cliente = await renovarMembresia(clienteId, body.autor);
+    let cliente = await renovarMembresia(clienteId, permiso.usuario.nombre);
 
     let avisoKajabi: string | null = null;
     try {

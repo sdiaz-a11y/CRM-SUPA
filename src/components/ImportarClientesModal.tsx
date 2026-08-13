@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { X, Upload, Download, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
-import { useAutor } from "@/lib/autor-context";
+import { descargarCsv } from "@/lib/csv";
 import { ComboboxBuscador } from "./ComboboxBuscador";
 
 // Evento y Etiqueta ya no van en el CSV: se eligen una sola vez en pantalla
@@ -76,20 +76,6 @@ function parsearCsv(texto: string): string[][] {
   return filas.filter((f) => f.some((v) => v.trim() !== ""));
 }
 
-function descargarCsv(nombreArchivo: string, encabezados: string[], filas: string[][]) {
-  const escapar = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-  const lineas = [encabezados, ...filas].map((f) => f.map(escapar).join(","));
-  // BOM al inicio para que Excel detecte UTF-8 y no rompa los acentos.
-  const contenido = "﻿" + lineas.join("\n") + "\n";
-  const blob = new Blob([contenido], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = nombreArchivo;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 function descargarPlantilla() {
   descargarCsv(
     "plantilla-clientes.csv",
@@ -105,7 +91,6 @@ export function ImportarClientesModal({
   onClose: () => void;
   onTerminado: () => void;
 }) {
-  const { autor } = useAutor();
   const inputRef = useRef<HTMLInputElement>(null);
   const [filas, setFilas] = useState<FilaCsv[] | null>(null);
   const [nombreArchivo, setNombreArchivo] = useState("");
@@ -170,7 +155,7 @@ export function ImportarClientesModal({
   }
 
   async function importar() {
-    if (!filas || !autor) return;
+    if (!filas) return;
     setProcesando(true);
     setProgreso(0);
     const salida: ResultadoFila[] = [];
@@ -192,7 +177,6 @@ export function ImportarClientesModal({
             evento: eventoGlobal || undefined,
             tipoMembresia: fila.tipoMembresia || undefined,
             etiqueta: etiquetaGlobal || undefined,
-            autor,
           }),
         });
         const data = await res.json();

@@ -39,12 +39,17 @@ export function AccesosSynergy({
   onToggle,
   editando,
   onCambiarDetalle,
+  soloLectura,
 }: {
   accesos: Accesos;
   pendiente: keyof Accesos | null;
   onToggle: (nivel: keyof Accesos, activo: boolean) => void;
   editando?: boolean;
   onCambiarDetalle?: (nivel: keyof Accesos, cambios: { cantidad?: number; variante?: Variante }) => void;
+  // El switch principal (a diferencia del editor de cantidad/variante, que ya
+  // depende de `editando`) es clickeable siempre por defecto — soloLectura lo
+  // deshabilita para roles sin permiso de editar accesos.
+  soloLectura?: boolean;
 }) {
   return (
     <div className="grid grid-cols-3 gap-3">
@@ -56,10 +61,10 @@ export function AccesosSynergy({
           <div key={key} className="flex flex-col gap-1.5">
             <button
               type="button"
-              disabled={cargando}
+              disabled={cargando || soloLectura}
               onClick={() => onToggle(key, !activo)}
               aria-pressed={activo}
-              className={`ease-spring flex w-full flex-col items-center gap-2 rounded-2xl border px-3 py-5 text-center outline-none transition focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-wait ${
+              className={`ease-spring flex w-full flex-col items-center gap-2 rounded-2xl border px-3 py-5 text-center outline-none transition focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed ${
                 activo
                   ? `${activeClass} border-transparent diffused`
                   : "border-silver bg-surface-2 text-muted hover:border-silver-deep"

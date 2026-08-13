@@ -1,0 +1,39 @@
+import { NextRequest, NextResponse } from "next/server";
+import { COOKIE_SESION, verificarTokenSesion } from "@/lib/jwt-edge";
+
+// Gate barato: ¿hay una cookie de sesión con JWT válido? No toca la base de
+// datos (correría en cada request, incluidas cargas de assets) — la
+// verificación fuerte (usuario activo, rol vigente) vive en
+// obtenerUsuarioActual() (src/lib/auth.ts), llamada por cada route handler.
+const RUTAS_PUBLICAS_EXACTAS = ["/login"];
+const PREFIJOS_PUBLICOS_API = [
+  "/api/auth/login",
+  // Kajabi no firma sus webhooks; se autentican con su propio ?token=,
+  // igual que el cron — no llevan cookie de sesión.
+  "/api/webhooks/kajabi",
+  "/api/cron/sincronizar-kajabi",
+];
+
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  const esApi = pathname.startsWith("/api/");
+
+  if (PREFIJOS_PUBLICOS_API.some((p) => pathname.startsWith(p))) return NextResponse.next();
+  if (RUTAS_PUBLICAS_EXACTAS.includes(pathname)) return NextResponse.next();
+
+  const token = req.cookies.get(COOKIE_SESION)?.value;
+  const sesion = token ? await verificarTokenSesion(token) : null;
+
+  if (!sesion) {
+    if (esApi) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    const url = new URL("/login", req.url);
+    url.searchParams.set("next", pathname);
+    return NextResponse.redirect(url);
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+};

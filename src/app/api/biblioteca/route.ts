@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requerirPermiso } from "@/lib/auth";
 import { agregarOpcionCatalogo, eliminarOpcionCatalogo, listarCatalogo, type TipoCatalogo } from "@/lib/catalogo";
 
 const TIPOS: TipoCatalogo[] = ["evento", "etiqueta", "tag"];
@@ -8,6 +9,9 @@ function tipoValido(tipo: string | null): tipo is TipoCatalogo {
 }
 
 export async function GET(req: NextRequest) {
+  const permiso = await requerirPermiso("verBiblioteca");
+  if (!permiso.ok) return permiso.respuesta;
+
   const tipo = req.nextUrl.searchParams.get("tipo");
   if (!tipoValido(tipo)) return NextResponse.json({ error: "Tipo de catálogo inválido" }, { status: 400 });
   const opciones = await listarCatalogo(tipo);
@@ -15,6 +19,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const permiso = await requerirPermiso("gestionarCatalogo");
+  if (!permiso.ok) return permiso.respuesta;
+
   const body = await req.json();
   if (!tipoValido(body?.tipo)) return NextResponse.json({ error: "Tipo de catálogo inválido" }, { status: 400 });
   if (!body?.valor?.trim()) return NextResponse.json({ error: "Falta el valor" }, { status: 400 });
@@ -29,6 +36,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const permiso = await requerirPermiso("gestionarCatalogo");
+  if (!permiso.ok) return permiso.respuesta;
+
   const body = await req.json();
   if (!tipoValido(body?.tipo)) return NextResponse.json({ error: "Tipo de catálogo inválido" }, { status: 400 });
   if (!body?.valor?.trim()) return NextResponse.json({ error: "Falta el valor" }, { status: 400 });

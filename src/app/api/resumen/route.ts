@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requerirPermiso } from "@/lib/auth";
 import { listarEventosGlobal, listarTodosClientes } from "@/lib/db";
 import { parsearFechaSkool } from "@/lib/fechas";
 
@@ -37,6 +38,9 @@ const MES_LABEL = [
 ];
 
 export async function GET() {
+  const permiso = await requerirPermiso("verDashboard");
+  if (!permiso.ok) return permiso.respuesta;
+
   const [clientes, eventos] = await Promise.all([listarTodosClientes(), listarEventosGlobal(30)]);
 
   const ahora = new Date();

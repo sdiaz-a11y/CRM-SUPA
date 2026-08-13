@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requerirPermiso } from "@/lib/auth";
 import { listarOpcionesFiltro } from "@/lib/db";
 
 // Pagina la tabla completa de clientes (solo 2 columnas) para armar las
@@ -7,6 +8,9 @@ import { listarOpcionesFiltro } from "@/lib/db";
 export const maxDuration = 30;
 
 export async function GET() {
+  const permiso = await requerirPermiso("verClientes");
+  if (!permiso.ok) return permiso.respuesta;
+
   const opciones = await listarOpcionesFiltro();
   return NextResponse.json(opciones);
 }

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { useAutor } from "@/lib/autor-context";
 import { PAISES_AMERICA } from "@/lib/paises-america";
 import { ComboboxBuscador } from "./ComboboxBuscador";
 import type { Cliente } from "@/lib/types";
@@ -17,7 +16,6 @@ export function NuevoClienteModal({
   onClose: () => void;
   onCreado: (cliente: Cliente) => void;
 }) {
-  const { autor } = useAutor();
   const [form, setForm] = useState({
     nombre: "",
     email: "",
@@ -63,13 +61,12 @@ export function NuevoClienteModal({
   }
 
   async function crear() {
-    if (!autor) return;
     setGuardando(true);
     setError(null);
     const res = await fetch("/api/clientes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, autor }),
+      body: JSON.stringify(form),
     });
     const data = await res.json();
     setGuardando(false);

@@ -107,17 +107,25 @@ function sanearBusqueda(q: string): string {
   return q.replace(/[,%*]/g, "");
 }
 
-export async function listarClientes(opciones?: FiltrosClientes): Promise<{
-  clientes: Cliente[];
-  total: number;
-}> {
-  const limite = opciones?.limite ?? 100;
-  const pagina = Math.max(1, opciones?.pagina ?? 1);
-  const inicio = (pagina - 1) * limite;
+// Aplica los filtros de la lista de clientes (búsqueda, estado, región,
+// eventos, membresías, rango de fechas, vigencia) a una query ya iniciada
+// con .from("clientes").select(...). Compartida entre listarClientes
+// (paginada) y exportarClientes (trae todo lo que matchee) para no duplicar
+// la lógica de filtros entre las dos.
+function aplicarFiltrosClientes<
+  Q extends {
+    or: (s: string) => Q;
+    ilike: (columna: string, valor: string) => Q;
+    eq: (columna: string, valor: string) => Q;
+    in: (columna: string, valores: string[]) => Q;
+    gte: (columna: string, valor: string) => Q;
+    lte: (columna: string, valor: string) => Q;
+    lt: (columna: string, valor: string) => Q;
+    gt: (columna: string, valor: string) => Q;
+  },
+>(query: Q, opciones?: FiltrosClientes): Q {
   const ahora = new Date().toISOString();
   const vigencia = opciones?.vigencia ?? "actuales";
-
-  let query = supabase.from("clientes").select("*", { count: "exact" }).is("eliminado_en", null);
 
   const q = sanearBusqueda(opciones?.busqueda?.trim() ?? "");
   if (q) query = query.or(`nombre.ilike.%${q}%,email.ilike.%${q}%`);
@@ -138,12 +146,43 @@ export async function listarClientes(opciones?: FiltrosClientes): Promise<{
   if (vigencia === "actuales") query = query.or(`fecha_inscripcion.is.null,fecha_inscripcion.lte.${ahora}`);
   if (vigencia === "futuros") query = query.gt("fecha_inscripcion", ahora);
 
+  return query;
+}
+
+export async function listarClientes(opciones?: FiltrosClientes): Promise<{
+  clientes: Cliente[];
+  total: number;
+}> {
+  const limite = opciones?.limite ?? 100;
+  const pagina = Math.max(1, opciones?.pagina ?? 1);
+  const inicio = (pagina - 1) * limite;
+
+  let query = supabase.from("clientes").select("*", { count: "exact" }).is("eliminado_en", null);
+  query = aplicarFiltrosClientes(query, opciones);
   query = query.order("orden_csv", { ascending: false }).range(inicio, inicio + limite - 1);
 
   const { data, error, count } = await query;
   if (error) throw error;
 
   return { clientes: (data as ClienteRow[]).map(filaACliente), total: count ?? 0 };
+}
+
+const CAP_EXPORTACION = 50_000;
+
+// Trae TODOS los clientes que matcheen los filtros (sin paginar), para el
+// botón "Descargar CSV" — a diferencia de listarClientes, que solo trae la
+// página actual. Usa el mismo traerTodo() que ya pagina de a 1000 filas
+// (límite de PostgREST) para las agregaciones del dashboard.
+export async function exportarClientes(opciones?: FiltrosClientes): Promise<Cliente[]> {
+  const filas = await traerTodo<ClienteRow>((from, to) => {
+    let query = supabase.from("clientes").select("*").is("eliminado_en", null);
+    query = aplicarFiltrosClientes(query, opciones);
+    return query.order("orden_csv", { ascending: false }).range(from, to);
+  });
+  if (filas.length > CAP_EXPORTACION) {
+    throw new Error("Demasiados resultados para exportar — aplica filtros para reducir la lista.");
+  }
+  return filas.map(filaACliente);
 }
 
 export async function listarOpcionesFiltro(): Promise<{ eventos: string[]; membresias: string[] }> {

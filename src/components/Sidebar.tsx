@@ -2,19 +2,34 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Sparkles, LogOut, Library, Trash2 } from "lucide-react";
-import { useAutor } from "@/lib/autor-context";
+import { LayoutDashboard, Users, Sparkles, LogOut, Library, Trash2, ShieldCheck } from "lucide-react";
+import { useSesion } from "@/lib/session-context";
+import { tienePermiso, type Accion, type Rol } from "@/lib/permisos";
 
-const NAV = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/clientes", label: "Clientes", icon: Users },
-  { href: "/biblioteca", label: "Biblioteca", icon: Library },
-  { href: "/eliminados", label: "Eliminados", icon: Trash2 },
+// Item "Dashboard"/"Biblioteca"/"Eliminados" quedan solo para admin — el
+// pedido original solo especificó "ver clientes y sus perfiles" para
+// coordinador/abeja. Para abrirlos a otro rol, agrega el rol a su permiso
+// en src/lib/permisos.ts (verDashboard/verBiblioteca/verEliminados).
+const NAV: { href: string; label: string; icon: typeof LayoutDashboard; permiso: Accion }[] = [
+  { href: "/", label: "Dashboard", icon: LayoutDashboard, permiso: "verDashboard" },
+  { href: "/clientes", label: "Clientes", icon: Users, permiso: "verClientes" },
+  { href: "/biblioteca", label: "Biblioteca", icon: Library, permiso: "verBiblioteca" },
+  { href: "/eliminados", label: "Eliminados", icon: Trash2, permiso: "verEliminados" },
+  { href: "/usuarios", label: "Usuarios", icon: ShieldCheck, permiso: "gestionarUsuarios" },
 ];
+
+const ROL_LABEL: Record<Rol, string> = {
+  admin: "Administrador",
+  coordinador: "Coordinador",
+  abeja: "Abeja",
+};
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { autor, cambiarAutor } = useAutor();
+  const { usuario, cerrarSesion } = useSesion();
+
+  if (!usuario) return null;
+  const items = NAV.filter((item) => tienePermiso(usuario.rol, item.permiso));
 
   return (
     <aside className="flex h-screen w-64 flex-none flex-col border-r border-silver/70 bg-surface px-4 py-6">
@@ -29,7 +44,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex flex-1 flex-col gap-1">
-        {NAV.map(({ href, label, icon: Icon }) => {
+        {items.map(({ href, label, icon: Icon }) => {
           const activo = pathname === href;
           return (
             <Link
@@ -50,13 +65,14 @@ export function Sidebar() {
 
       <div className="mt-auto rounded-xl bg-surface-2 px-3 py-3">
         <p className="text-xs text-muted">Conectado como</p>
-        <p className="truncate text-sm font-medium text-foreground">{autor}</p>
+        <p className="truncate text-sm font-medium text-foreground">{usuario.nombre}</p>
+        <p className="text-xs text-muted">{ROL_LABEL[usuario.rol]}</p>
         <button
-          onClick={cambiarAutor}
+          onClick={cerrarSesion}
           className="ease-spring mt-2 flex items-center gap-1.5 text-xs font-medium text-muted transition hover:text-danger"
         >
           <LogOut className="h-3.5 w-3.5" strokeWidth={1.75} />
-          Cambiar nombre
+          Cerrar sesión
         </button>
       </div>
     </aside>

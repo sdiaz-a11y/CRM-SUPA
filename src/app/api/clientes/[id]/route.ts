@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requerirPermiso } from "@/lib/auth";
 import {
   actualizarAcceso,
   actualizarDatosCliente,
@@ -8,6 +9,9 @@ import {
 } from "@/lib/db";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const permiso = await requerirPermiso("verClientes");
+  if (!permiso.ok) return permiso.respuesta;
+
   const { id } = await params;
   const cliente = await obtenerCliente(decodeURIComponent(id));
   if (!cliente) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
@@ -15,16 +19,23 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const body = await req.json();
+  // "acceso"/"acceso-detalle" (accesos/boletos) y "datos"/"tags" (datos del
+  // cliente) requieren el mismo nivel de permiso hoy (editarCliente/
+  // editarAccesos = solo admin), pero se validan por separado a propósito
+  // para poder abrir uno sin el otro más adelante si hace falta.
+  const permiso = await requerirPermiso(
+    body?.tipo === "acceso" || body?.tipo === "acceso-detalle" ? "editarAccesos" : "editarCliente"
+  );
+  if (!permiso.ok) return permiso.respuesta;
+  const autor = permiso.usuario.nombre;
+
   const { id } = await params;
   const clienteId = decodeURIComponent(id);
-  const body = await req.json();
-  if (!body?.autor?.trim()) {
-    return NextResponse.json({ error: "Falta el nombre de quien registra" }, { status: 400 });
-  }
 
   try {
     if (body.tipo === "acceso") {
-      const cliente = await actualizarAcceso(clienteId, body.nivel, body.activo, body.autor);
+      const cliente = await actualizarAcceso(clienteId, body.nivel, body.activo, autor);
       return NextResponse.json({ cliente });
     }
 
@@ -33,7 +44,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         clienteId,
         body.nivel,
         { cantidad: body.cantidad, variante: body.variante },
-        body.autor
+        autor
       );
       return NextResponse.json({ cliente });
     }
@@ -57,13 +68,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           notasSoporte: body.notasSoporte,
           finAcceso: body.finAcceso,
         },
-        body.autor
+        autor
       );
       return NextResponse.json({ cliente });
     }
 
     if (body.tipo === "tags") {
-      const cliente = await actualizarTags(clienteId, body.tags ?? [], body.autor);
+      const cliente = await actualizarTags(clienteId, body.tags ?? [], autor);
       return NextResponse.json({ cliente });
     }
 
