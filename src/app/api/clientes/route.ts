@@ -5,6 +5,7 @@ import {
   listarClientes,
   marcarAccesoPlataforma,
   marcarInvitacionSkoolEnviada,
+  marcarMensajeBienvenidaWa,
   recalcularAccesos,
   registrarTagKajabi,
   vincularKajabiContactId,
@@ -110,6 +111,9 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       avisoGhl = err instanceof Error ? err.message : "No se pudo dar de alta en GoHighLevel";
     }
+    // Sin teléfono no hay a dónde mandar el WhatsApp, aunque el alta en GHL
+    // en sí haya salido bien — se marca Pendiente en vez de Enviado.
+    cliente = await marcarMensajeBienvenidaWa(cliente.id, avisoGhl || !cliente.telefono ? "Pendiente" : "Enviado");
 
     return NextResponse.json({ cliente, avisoKajabi, avisoSkool, avisoGhl });
   } catch (err) {

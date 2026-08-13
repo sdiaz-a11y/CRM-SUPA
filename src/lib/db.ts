@@ -2,7 +2,7 @@ import { supabase } from "./supabase";
 import { calcularVencimientoSkool, formatearFechaSkool, parsearFechaSkool } from "./fechas";
 import { cargarInventarioBoletos, cargarPaisPorEvento, calcularAccesos, regionDeCliente } from "./boletos";
 import { filaACliente, fechaSkoolADateOnly, type ClienteRow } from "./supabase-map";
-import type { Accesos, Cliente, EventoTimeline, TipoEvento, Variante } from "./types";
+import type { Accesos, Cliente, EstadoMensajeBienvenidaWa, EventoTimeline, TipoEvento, Variante } from "./types";
 
 const PAGINA_INTERNA = 1000;
 
@@ -311,6 +311,30 @@ export async function marcarAccesoPlataforma(id: string, valor: string): Promise
   return filaACliente(data as ClienteRow);
 }
 
+// Refleja el resultado del envío del WhatsApp de bienvenida (disparado por
+// el Workflow de GHL sobre el tag que le pone altaEnGhl). "Número Inválido"
+// nunca lo escribe esta función — es una opción exclusivamente manual desde
+// el panel del cliente. Sin `autor` (alta de cliente nuevo) no deja rastro
+// en la timeline, porque ya queda cubierto por el evento "CREACION"; con
+// `autor` (reenvío manual desde el botón "Enviar") sí registra el cambio.
+export async function marcarMensajeBienvenidaWa(
+  id: string,
+  estado: Extract<EstadoMensajeBienvenidaWa, "Enviado" | "Pendiente">,
+  autor?: string
+): Promise<Cliente> {
+  const { data, error } = await supabase
+    .from("clientes")
+    .update({ contacto_whats: estado, actualizado_en: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  if (autor) {
+    await registrarEvento(id, "EDICION", `Mensaje de Bienvenida WA reenviado — quedó: ${estado}`, autor);
+  }
+  return filaACliente(data as ClienteRow);
+}
+
 // Recalcula General/VIP/Black con el motor de reglas (REGLAS-BOLETOS-
 // SYNERGY.md) a partir de evento + tipo de membresía + acceso a
 // plataforma ya guardados. Se llama tras confirmar el acceso en Kajabi,
@@ -417,7 +441,7 @@ const CAMPOS_EDITABLES: { key: keyof CambiosDatosCliente; columna: string; label
   { key: "tipoMembresia", columna: "tipo_membresia", label: "Tipo de membresía" },
   { key: "vencimientoSkool", columna: "vencimiento_skool", label: "Vencimiento Skool" },
   { key: "invitacionSkool", columna: "invitacion_skool", label: "Invitación de Skool" },
-  { key: "contactoWhats", columna: "contacto_whats", label: "Contacto en WhatsApp" },
+  { key: "contactoWhats", columna: "contacto_whats", label: "Mensaje de Bienvenida WA" },
   { key: "llamada", columna: "llamada", label: "Llamada" },
   { key: "notasSoporte", columna: "notas_soporte", label: "Notas de soporte técnico" },
 ];

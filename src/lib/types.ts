@@ -39,7 +39,7 @@ export type Cliente = {
   tipoMembresia: string | null; // Tipo de Membresia
   vencimientoSkool: string | null; // Vencimiento Skool
   invitacionSkool: string | null; // Invitacion de Skool
-  contactoWhats: string | null; // Contacto en Whats
+  contactoWhats: string | null; // Mensaje de Bienvenida WA (antes "Contacto en Whats" en el CSV de origen)
   llamada: string | null; // Llamada
 
   // Columna U: notas del equipo de soporte técnico.
@@ -88,3 +88,9 @@ export type Db = {
   clientes: Cliente[];
   eventos: EventoTimeline[];
 };
+
+// Estados posibles del "Mensaje de Bienvenida WA". La automatización (alta de
+// cliente o el botón "Enviar") solo escribe "Enviado" o "Pendiente" —
+// "Número Inválido" es exclusivamente una elección manual del equipo.
+export const ESTADOS_MENSAJE_BIENVENIDA_WA = ["Enviado", "Pendiente", "Número Inválido"] as const;
+export type EstadoMensajeBienvenidaWa = (typeof ESTADOS_MENSAJE_BIENVENIDA_WA)[number];

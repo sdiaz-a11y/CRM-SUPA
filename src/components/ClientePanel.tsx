@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   X,
   Pencil,
@@ -26,12 +26,13 @@ import {
   ClipboardList,
   StickyNote,
   Activity,
-  Tags,
+  Plus,
   RefreshCw,
   AlertTriangle,
   Trash2,
 } from "lucide-react";
 import type { Accesos, Cliente, EventoTimeline } from "@/lib/types";
+import { ESTADOS_MENSAJE_BIENVENIDA_WA } from "@/lib/types";
 import { useSesion } from "@/lib/session-context";
 import { tienePermiso } from "@/lib/permisos";
 import { AccesosSynergy } from "./AccesosSynergy";
@@ -146,6 +147,8 @@ export function ClientePanel({
   const [renovando, setRenovando] = useState(false);
   const [pasoEliminar, setPasoEliminar] = useState<0 | 1 | 2>(0);
   const [eliminando, setEliminando] = useState(false);
+  const [pasoEnviarWa, setPasoEnviarWa] = useState<0 | 1>(0);
+  const [enviandoWa, setEnviandoWa] = useState(false);
 
   useEffect(() => {
     fetch("/api/biblioteca?tipo=tag")
@@ -362,6 +365,36 @@ export function ClientePanel({
     setNota("");
   }
 
+  async function confirmarEnviarWa() {
+    if (!cliente || !puedeEditar) return;
+    if (pasoEnviarWa < 1) {
+      setPasoEnviarWa(1);
+      return;
+    }
+    setEnviandoWa(true);
+    setError(null);
+    const res = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/reenviar-bienvenida-wa`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    setEnviandoWa(false);
+    setPasoEnviarWa(0);
+    if (!res.ok) {
+      setError(data.error ?? "No se pudo reenviar el mensaje de bienvenida");
+      return;
+    }
+    if (data.aviso) {
+      setError(`No se pudo reenviar por WhatsApp — quedó en Pendiente: ${data.aviso}`);
+    }
+    setCliente(data.cliente);
+    setForm((f) => ({ ...f, contactoWhats: data.cliente.contactoWhats ?? "" }));
+    onClienteActualizado(data.cliente);
+    const eventosRes = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/eventos`).then((r) =>
+      r.json()
+    );
+    setEventos(eventosRes.eventos ?? []);
+  }
+
   function copiar(valor: string, campo: "email" | "telefono") {
     navigator.clipboard.writeText(valor).then(() => {
       setCopiado(campo);
@@ -391,8 +424,28 @@ export function ClientePanel({
           <>
             <div className="brand-plate flex-none px-6 pb-5 pt-6 text-white">
               <div className="flex items-start justify-between">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/15 text-lg font-semibold">
-                  {cliente.nombre.charAt(0).toUpperCase()}
+                <div className="flex items-center gap-2">
+                  <div className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-white/15 text-lg font-semibold">
+                    {cliente.nombre.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {cliente.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-white/90"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                    {puedeEditar && (
+                      <TagsPopover
+                        tagsCatalogo={tagsCatalogo}
+                        tagsCliente={cliente.tags}
+                        guardandoTag={guardandoTag}
+                        onToggle={toggleTag}
+                      />
+                    )}
+                  </div>
                 </div>
                 <button
                   onClick={onClose}
@@ -544,42 +597,12 @@ export function ClientePanel({
                     </button>
                   </Tarjeta>
 
-                  <Tarjeta titulo="Tags">
-                    {tagsCatalogo.length === 0 ? (
-                      <p className="text-sm text-muted">
-                        Todavía no hay tags en la Biblioteca. Agrégalos desde el menú lateral.
-                      </p>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {tagsCatalogo.map((tag) => {
-                          const activo = cliente.tags.includes(tag);
-                          return (
-                            <button
-                              key={tag}
-                              onClick={() => toggleTag(tag, !activo)}
-                              disabled={!puedeEditar || guardandoTag === tag}
-                              className={`ease-spring flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition disabled:cursor-default disabled:opacity-50 ${
-                                activo
-                                  ? "brand-plate text-white"
-                                  : "border border-silver text-muted hover:text-foreground"
-                              }`}
-                            >
-                              <Tags className="h-3 w-3" strokeWidth={1.75} />
-                              {tag}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </Tarjeta>
-
                   <Tarjeta titulo="Datos del cliente">
                     {!editando ? (
                       <dl className="space-y-2.5 text-sm">
                         <CampoValor label="País" valor={cliente.pais} />
-                        <CampoValor label="Ciudad" valor={cliente.ciudad} />
                         <CampoValor label="Evento" valor={cliente.evento} />
-                        <CampoValor label="Contacto en WhatsApp" valor={cliente.contactoWhats} />
+                        <CampoValor label="Mensaje de Bienvenida WA" valor={cliente.contactoWhats} />
                       </dl>
                     ) : (
                       <div className="space-y-3">
@@ -592,17 +615,9 @@ export function ClientePanel({
                             onChange={(v) => setForm((f) => ({ ...f, telefono: v }))}
                           />
                         </Campo>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Campo label="País">
-                            <Input value={form.pais} onChange={(v) => setForm((f) => ({ ...f, pais: v }))} />
-                          </Campo>
-                          <Campo label="Ciudad">
-                            <Input
-                              value={form.ciudad}
-                              onChange={(v) => setForm((f) => ({ ...f, ciudad: v }))}
-                            />
-                          </Campo>
-                        </div>
+                        <Campo label="País">
+                          <Input value={form.pais} onChange={(v) => setForm((f) => ({ ...f, pais: v }))} />
+                        </Campo>
                       </div>
                     )}
                   </Tarjeta>
@@ -905,11 +920,47 @@ export function ClientePanel({
                         label="Invitación de Skool"
                         valor={cliente.invitacionSkool}
                       />
-                      <DatoFila
-                        icon={MessagesSquare}
-                        label="Contacto en WhatsApp"
-                        valor={cliente.contactoWhats}
-                      />
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="flex items-start gap-2 text-foreground">
+                          <MessageCircle className="mt-0.5 h-3.5 w-3.5 flex-none text-muted" strokeWidth={1.75} />
+                          <span>
+                            <span className="text-muted">Mensaje de Bienvenida WA: </span>
+                            {cliente.contactoWhats || <span className="text-muted">—</span>}
+                          </span>
+                        </span>
+                        {puedeEditar && (
+                          <button
+                            onClick={confirmarEnviarWa}
+                            disabled={!cliente.telefono || enviandoWa}
+                            title={!cliente.telefono ? "El cliente no tiene teléfono registrado" : "Reenviar mensaje de bienvenida"}
+                            className="ease-spring flex-none rounded-lg border border-silver px-2.5 py-1 text-xs font-medium text-foreground transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Enviar
+                          </button>
+                        )}
+                      </div>
+                      {pasoEnviarWa === 1 && (
+                        <div className="rounded-lg border border-primary/30 bg-primary-dim/40 p-3">
+                          <p className="mb-2.5 text-xs text-foreground">
+                            ¿Reenviar el mensaje de bienvenida por WhatsApp a <strong>{cliente.telefono}</strong>?
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setPasoEnviarWa(0)}
+                              className="ease-spring rounded-lg border border-silver px-3 py-1.5 text-xs font-medium text-muted transition hover:text-foreground"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              onClick={confirmarEnviarWa}
+                              disabled={enviandoWa}
+                              className="ease-spring rounded-lg brand-plate px-3 py-1.5 text-xs font-medium text-white transition disabled:opacity-50"
+                            >
+                              {enviandoWa ? "Enviando…" : "Confirmar y enviar"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                       <DatoFila icon={PhoneCall} label="Llamada" valor={cliente.llamada} />
                     </dl>
                   ) : (
@@ -946,11 +997,23 @@ export function ClientePanel({
                         />
                       </Campo>
                       <div className="grid grid-cols-2 gap-2">
-                        <Campo label="Contacto en WhatsApp">
-                          <Input
+                        <Campo label="Mensaje de Bienvenida WA">
+                          <select
                             value={form.contactoWhats}
-                            onChange={(v) => setForm((f) => ({ ...f, contactoWhats: v }))}
-                          />
+                            onChange={(e) => setForm((f) => ({ ...f, contactoWhats: e.target.value }))}
+                            className="w-full rounded-lg border border-silver bg-surface-2 px-3 py-1.5 text-sm text-foreground outline-none ring-primary/30 focus:ring-2"
+                          >
+                            {form.contactoWhats &&
+                              !(ESTADOS_MENSAJE_BIENVENIDA_WA as readonly string[]).includes(form.contactoWhats) && (
+                                <option value={form.contactoWhats}>{form.contactoWhats} (anterior)</option>
+                              )}
+                            <option value="">— Sin definir —</option>
+                            {ESTADOS_MENSAJE_BIENVENIDA_WA.map((op) => (
+                              <option key={op} value={op}>
+                                {op}
+                              </option>
+                            ))}
+                          </select>
                         </Campo>
                         <Campo label="Llamada">
                           <Input value={form.llamada} onChange={(v) => setForm((f) => ({ ...f, llamada: v }))} />
@@ -1181,5 +1244,77 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
       <span className="mb-1 block text-xs font-medium text-muted">{label}</span>
       {children}
     </label>
+  );
+}
+
+function TagsPopover({
+  tagsCatalogo,
+  tagsCliente,
+  guardandoTag,
+  onToggle,
+}: {
+  tagsCatalogo: string[];
+  tagsCliente: string[];
+  guardandoTag: string | null;
+  onToggle: (tag: string, activo: boolean) => void;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClickFuera(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setAbierto(false);
+    }
+    document.addEventListener("mousedown", onClickFuera);
+    return () => document.removeEventListener("mousedown", onClickFuera);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setAbierto((a) => !a)}
+        aria-label="Agregar o quitar tags"
+        className="ease-spring flex h-5 w-5 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25"
+      >
+        <Plus className="h-3 w-3" strokeWidth={2.5} />
+      </button>
+
+      {abierto && (
+        <div className="animate-fade-in-fast absolute left-0 top-[calc(100%+6px)] z-20 w-56 rounded-xl border border-silver bg-surface p-1.5 shadow-xl">
+          {tagsCatalogo.length === 0 ? (
+            <p className="px-2.5 py-2 text-xs text-muted">
+              Todavía no hay tags en la Biblioteca. Agrégalos desde el menú lateral.
+            </p>
+          ) : (
+            <div className="max-h-56 overflow-y-auto">
+              {tagsCatalogo.map((tag) => {
+                const activo = tagsCliente.includes(tag);
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => onToggle(tag, !activo)}
+                    disabled={guardandoTag === tag}
+                    className={`ease-spring flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition disabled:opacity-50 ${
+                      activo ? "bg-primary-dim font-medium text-primary-deep" : "text-foreground hover:bg-surface-2"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-4 w-4 flex-none items-center justify-center rounded border ${
+                        activo ? "border-primary bg-primary text-white" : "border-silver"
+                      }`}
+                    >
+                      {activo && <Check className="h-3 w-3" strokeWidth={3} />}
+                    </span>
+                    <span className="truncate">{tag}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

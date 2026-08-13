@@ -1,8 +1,13 @@
 export type PaisAmerica = { nombre: string; lada: string };
 
 // Todos los países del continente americano (nombre en español + lada
-// telefónica), para el selector de país del formulario de alta.
+// telefónica), para el selector de país del formulario de alta. Los 3 más
+// usados van primero (México/Estados Unidos/Colombia), el resto en orden
+// alfabético.
 export const PAISES_AMERICA: PaisAmerica[] = [
+  { nombre: "México", lada: "+52" },
+  { nombre: "Estados Unidos", lada: "+1" },
+  { nombre: "Colombia", lada: "+57" },
   { nombre: "Antigua y Barbuda", lada: "+1" },
   { nombre: "Argentina", lada: "+54" },
   { nombre: "Bahamas", lada: "+1" },
@@ -12,20 +17,17 @@ export const PAISES_AMERICA: PaisAmerica[] = [
   { nombre: "Brasil", lada: "+55" },
   { nombre: "Canadá", lada: "+1" },
   { nombre: "Chile", lada: "+56" },
-  { nombre: "Colombia", lada: "+57" },
   { nombre: "Costa Rica", lada: "+506" },
   { nombre: "Cuba", lada: "+53" },
   { nombre: "Dominica", lada: "+1" },
   { nombre: "Ecuador", lada: "+593" },
   { nombre: "El Salvador", lada: "+503" },
-  { nombre: "Estados Unidos", lada: "+1" },
   { nombre: "Granada", lada: "+1" },
   { nombre: "Guatemala", lada: "+502" },
   { nombre: "Guyana", lada: "+592" },
   { nombre: "Haití", lada: "+509" },
   { nombre: "Honduras", lada: "+504" },
   { nombre: "Jamaica", lada: "+1" },
-  { nombre: "México", lada: "+52" },
   { nombre: "Nicaragua", lada: "+505" },
   { nombre: "Panamá", lada: "+507" },
   { nombre: "Paraguay", lada: "+595" },
