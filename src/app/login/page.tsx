@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LogIn } from "lucide-react";
+import { Eye, EyeOff, LogIn } from "lucide-react";
 import { useSesion } from "@/lib/session-context";
 
 export default function LoginPage() {
@@ -19,6 +19,7 @@ function LoginForm() {
   const { usuario, cargando, refrescar } = useSesion();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [mostrarPassword, setMostrarPassword] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,14 +77,25 @@ function LoginForm() {
             autoComplete="username"
             className="mt-6 w-full rounded-xl border border-silver bg-surface-2 px-4 py-2.5 text-sm text-foreground outline-none ring-primary/30 focus:ring-2"
           />
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Contraseña"
-            autoComplete="current-password"
-            className="mt-3 w-full rounded-xl border border-silver bg-surface-2 px-4 py-2.5 text-sm text-foreground outline-none ring-primary/30 focus:ring-2"
-          />
+          <div className="relative mt-3">
+            <input
+              type={mostrarPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Contraseña"
+              autoComplete="current-password"
+              className="w-full rounded-xl border border-silver bg-surface-2 px-4 py-2.5 pr-10 text-sm text-foreground outline-none ring-primary/30 focus:ring-2"
+            />
+            <button
+              type="button"
+              onClick={() => setMostrarPassword((v) => !v)}
+              tabIndex={-1}
+              aria-label={mostrarPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+              className="ease-spring absolute right-3 top-1/2 -translate-y-1/2 text-muted transition hover:text-foreground"
+            >
+              {mostrarPassword ? <EyeOff className="h-4 w-4" strokeWidth={1.75} /> : <Eye className="h-4 w-4" strokeWidth={1.75} />}
+            </button>
+          </div>
 
           {error && <p className="mt-3 text-xs text-danger">{error}</p>}
 
