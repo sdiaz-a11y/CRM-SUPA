@@ -62,6 +62,21 @@ export async function altaEnGhl(nombre: string, email: string, telefono: string 
   })) as { contact: { id: string } };
   const contactId = data.contact.id;
 
+  // El Workflow de bienvenida se dispara con el trigger "se agregó el tag":
+  // si el contacto ya lo tenía (alta repetida, o el botón "Enviar" para
+  // reenviar), volver a agregarlo no cuenta como "agregado" para GHL y el
+  // Workflow no vuelve a correr. Se quita primero (ignorando el error si no
+  // lo tenía) para forzar un tag agregado limpio cada vez — mismo truco que
+  // otorgarOferta() en kajabi.ts con la oferta de Kajabi.
+  try {
+    await ghlFetch(`/contacts/${contactId}/tags`, {
+      method: "DELETE",
+      body: JSON.stringify({ tags: [tagAltaCrm()] }),
+    });
+  } catch {
+    // No tenía el tag — nada que quitar, se continúa igual.
+  }
+
   await ghlFetch(`/contacts/${contactId}/tags`, {
     method: "POST",
     body: JSON.stringify({ tags: [tagAltaCrm()] }),

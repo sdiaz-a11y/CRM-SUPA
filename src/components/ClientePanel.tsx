@@ -602,7 +602,46 @@ export function ClientePanel({
                       <dl className="space-y-2.5 text-sm">
                         <CampoValor label="País" valor={cliente.pais} />
                         <CampoValor label="Evento" valor={cliente.evento} />
-                        <CampoValor label="Mensaje de Bienvenida WA" valor={cliente.contactoWhats} />
+                        <div>
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-xs font-medium text-muted">Mensaje de Bienvenida WA</p>
+                            {puedeEditar && (
+                              <button
+                                onClick={confirmarEnviarWa}
+                                disabled={!cliente.telefono || enviandoWa}
+                                title={!cliente.telefono ? "El cliente no tiene teléfono registrado" : "Reenviar mensaje de bienvenida"}
+                                className="ease-spring flex-none rounded-lg border border-silver px-2.5 py-1 text-xs font-medium text-foreground transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                Enviar
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-foreground">
+                            {cliente.contactoWhats || <span className="text-muted">—</span>}
+                          </p>
+                          {pasoEnviarWa === 1 && (
+                            <div className="mt-2 rounded-lg border border-primary/30 bg-primary-dim/40 p-3">
+                              <p className="mb-2.5 text-xs text-foreground">
+                                ¿Reenviar el mensaje de bienvenida por WhatsApp a <strong>{cliente.telefono}</strong>?
+                              </p>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => setPasoEnviarWa(0)}
+                                  className="ease-spring rounded-lg border border-silver px-3 py-1.5 text-xs font-medium text-muted transition hover:text-foreground"
+                                >
+                                  Cancelar
+                                </button>
+                                <button
+                                  onClick={confirmarEnviarWa}
+                                  disabled={enviandoWa}
+                                  className="ease-spring rounded-lg brand-plate px-3 py-1.5 text-xs font-medium text-white transition disabled:opacity-50"
+                                >
+                                  {enviandoWa ? "Enviando…" : "Confirmar y enviar"}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </dl>
                     ) : (
                       <div className="space-y-3">
