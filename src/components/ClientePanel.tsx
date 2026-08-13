@@ -89,6 +89,22 @@ function formDeCliente(c: Cliente | null): Form {
   };
 }
 
+const ACCESO_LABEL: Record<keyof Accesos, string> = {
+  general: "General",
+  vip: "VIP",
+  black: "Black Access",
+};
+
+function textoAcceso(d: Accesos[keyof Accesos]): string {
+  return d.activo && d.cantidad > 0 ? `${d.cantidad}${d.variante ? ` · ${d.variante}` : ""}` : "Sin acceso";
+}
+
+function diferenciasAccesos(anterior: Accesos, nuevo: Accesos): { nivel: keyof Accesos; de: string; a: string }[] {
+  return (Object.keys(nuevo) as (keyof Accesos)[])
+    .filter((nivel) => JSON.stringify(anterior[nivel]) !== JSON.stringify(nuevo[nivel]))
+    .map((nivel) => ({ nivel, de: textoAcceso(anterior[nivel]), a: textoAcceso(nuevo[nivel]) }));
+}
+
 type EstadoKajabi = "cargando" | "activa" | "revocada" | "sin_contacto" | "error";
 
 export function ClientePanel({
@@ -115,7 +131,10 @@ export function ClientePanel({
   const [editando, setEditando] = useState(false);
   const [form, setForm] = useState<Form>(formDeCliente(null));
   const [guardando, setGuardando] = useState(false);
-  const [accesoPendiente, setAccesoPendiente] = useState<keyof Accesos | null>(null);
+  const [editandoAccesos, setEditandoAccesos] = useState(false);
+  const [borradorAccesos, setBorradorAccesos] = useState<Accesos | null>(null);
+  const [confirmandoAccesos, setConfirmandoAccesos] = useState(false);
+  const [guardandoAccesos, setGuardandoAccesos] = useState(false);
   const [nota, setNota] = useState("");
   const [enviandoNota, setEnviandoNota] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -202,47 +221,41 @@ export function ClientePanel({
     setForm(formDeCliente(cliente));
   }
 
-  async function toggleAcceso(nivel: keyof Accesos, activo: boolean) {
+  function iniciarEdicionAccesos() {
     if (!cliente || !puedeEditarAccesos) return;
-    setAccesoPendiente(nivel);
+    setBorradorAccesos(cliente.accesos);
+    setEditandoAccesos(true);
+    setConfirmandoAccesos(false);
+  }
+
+  function cancelarEdicionAccesos() {
+    setEditandoAccesos(false);
+    setConfirmandoAccesos(false);
+    setBorradorAccesos(null);
+  }
+
+  async function confirmarGuardarAccesos() {
+    if (!cliente || !borradorAccesos || !puedeEditarAccesos) return;
+    setGuardandoAccesos(true);
     setError(null);
     const res = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tipo: "acceso", nivel, activo }),
+      body: JSON.stringify({ tipo: "accesos", accesos: borradorAccesos }),
     });
     const data = await res.json();
-    setAccesoPendiente(null);
+    setGuardandoAccesos(false);
     if (!res.ok) {
-      setError(data.error ?? "No se pudo actualizar el acceso");
+      setError(data.error ?? "No se pudo actualizar los accesos");
       return;
     }
     setCliente(data.cliente);
     onClienteActualizado(data.cliente);
+    cancelarEdicionAccesos();
     const eventosRes = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/eventos`).then((r) =>
       r.json()
     );
     setEventos(eventosRes.eventos ?? []);
-  }
-
-  async function cambiarDetalleAcceso(
-    nivel: keyof Accesos,
-    cambios: { cantidad?: number; variante?: Accesos["general"]["variante"] }
-  ) {
-    if (!cliente || !puedeEditarAccesos) return;
-    setError(null);
-    const res = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tipo: "acceso-detalle", nivel, ...cambios }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error ?? "No se pudo actualizar el acceso");
-      return;
-    }
-    setCliente(data.cliente);
-    onClienteActualizado(data.cliente);
   }
 
   async function confirmarRenovar() {
@@ -780,13 +793,68 @@ export function ClientePanel({
 
                   <Tarjeta titulo="Accesos a Synergy Unlimited">
                     <AccesosSynergy
-                      accesos={cliente.accesos}
-                      pendiente={accesoPendiente}
-                      onToggle={toggleAcceso}
-                      editando={editando && puedeEditarAccesos}
-                      onCambiarDetalle={cambiarDetalleAcceso}
-                      soloLectura={!puedeEditarAccesos}
+                      valor={editandoAccesos && borradorAccesos ? borradorAccesos : cliente.accesos}
+                      onChange={setBorradorAccesos}
+                      soloLectura={!editandoAccesos}
+                      paisCliente={cliente.pais}
                     />
+
+                    {puedeEditarAccesos && !editandoAccesos && (
+                      <button
+                        onClick={iniciarEdicionAccesos}
+                        className="ease-spring mt-3 text-xs font-medium text-primary transition hover:text-primary-deep"
+                      >
+                        Editar accesos →
+                      </button>
+                    )}
+
+                    {editandoAccesos && !confirmandoAccesos && (
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          onClick={cancelarEdicionAccesos}
+                          className="ease-spring rounded-lg border border-silver px-3 py-1.5 text-xs font-medium text-muted transition hover:text-foreground"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={() => setConfirmandoAccesos(true)}
+                          disabled={
+                            !borradorAccesos || diferenciasAccesos(cliente.accesos, borradorAccesos).length === 0
+                          }
+                          className="ease-spring rounded-lg brand-plate px-3 py-1.5 text-xs font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Guardar cambios
+                        </button>
+                      </div>
+                    )}
+
+                    {editandoAccesos && confirmandoAccesos && borradorAccesos && (
+                      <div className="mt-3 rounded-lg border border-primary/30 bg-primary-dim/40 p-3">
+                        <p className="mb-2 text-xs font-medium text-foreground">Confirma el cambio de accesos:</p>
+                        <ul className="mb-2.5 space-y-1 text-xs text-foreground">
+                          {diferenciasAccesos(cliente.accesos, borradorAccesos).map((d) => (
+                            <li key={d.nivel}>
+                              <span className="font-medium">{ACCESO_LABEL[d.nivel]}:</span> {d.de} → {d.a}
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setConfirmandoAccesos(false)}
+                            className="ease-spring rounded-lg border border-silver px-3 py-1.5 text-xs font-medium text-muted transition hover:text-foreground"
+                          >
+                            Volver a editar
+                          </button>
+                          <button
+                            onClick={confirmarGuardarAccesos}
+                            disabled={guardandoAccesos}
+                            className="ease-spring rounded-lg brand-plate px-3 py-1.5 text-xs font-medium text-white transition disabled:opacity-50"
+                          >
+                            {guardandoAccesos ? "Guardando…" : "Confirmar y guardar"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </Tarjeta>
 
                   <Tarjeta titulo="Acceso a plataforma (histórico)">

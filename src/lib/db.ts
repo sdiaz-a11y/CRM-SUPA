@@ -554,63 +554,18 @@ const ACCESO_LABEL: Record<keyof Accesos, string> = {
   vip: "VIP",
   black: "Black Access",
 };
-const ACCESO_TIPO: Record<keyof Accesos, TipoEvento> = {
-  general: "ACCESO_GENERAL",
-  vip: "ACCESO_VIP",
-  black: "ACCESO_BLACK",
-};
 
-export async function actualizarAcceso(
-  id: string,
-  nivel: keyof Accesos,
-  activo: boolean,
-  autor: string
-): Promise<Cliente> {
-  const { data: fila, error: errLectura } = await supabase
-    .from("clientes")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
-  if (errLectura) throw errLectura;
-  if (!fila) throw new Error("Cliente no encontrado");
-  const cliente = filaACliente(fila as ClienteRow);
-
-  const detalleAcceso = cliente.accesos[nivel];
-  if (detalleAcceso.activo === activo) return cliente;
-
-  const nuevoDetalle = { ...detalleAcceso, activo };
-  if (activo && nuevoDetalle.cantidad === 0) {
-    nuevoDetalle.cantidad = 1;
-    if (nivel !== "black" && !nuevoDetalle.variante) {
-      const p = (cliente.pais ?? "").toLowerCase();
-      nuevoDetalle.variante = p.includes("méxico") || p.includes("mexico") ? "MX" : "US";
-    }
-  }
-  const nuevosAccesos = { ...cliente.accesos, [nivel]: nuevoDetalle };
-
-  const { data, error } = await supabase
-    .from("clientes")
-    .update({ accesos: nuevosAccesos, actualizado_en: new Date().toISOString() })
-    .eq("id", id)
-    .select("*")
-    .single();
-  if (error) throw error;
-
-  await registrarEvento(
-    id,
-    ACCESO_TIPO[nivel],
-    `Acceso ${ACCESO_LABEL[nivel]}: ${activo ? "activado" : "desactivado"}`,
-    autor
-  );
-  return filaACliente(data as ClienteRow);
+function textoAcceso(d: { activo: boolean; cantidad: number; variante: Variante }): string {
+  return d.activo && d.cantidad > 0 ? `${d.cantidad}${d.variante ? ` · ${d.variante}` : ""}` : "Sin acceso";
 }
 
-export async function actualizarDetalleAcceso(
-  id: string,
-  nivel: keyof Accesos,
-  cambios: { cantidad?: number; variante?: Variante },
-  autor: string
-): Promise<Cliente> {
+// Guarda los 3 niveles de acceso (General/VIP/Black) en una sola escritura —
+// reemplaza el objeto completo en vez de tocar un nivel a la vez, para que
+// "quitarle 2 General y darle 2 VIP" sea una sola operación atómica, no dos
+// PATCH separados que podrían dejar al cliente en un estado intermedio si
+// uno falla. Registra un solo evento "EDICION" listando qué niveles
+// cambiaron (igual que actualizarDatosCliente con los demás campos).
+export async function actualizarAccesos(id: string, nuevosAccesos: Accesos, autor: string): Promise<Cliente> {
   const { data: fila, error: errLectura } = await supabase
     .from("clientes")
     .select("*")
@@ -618,34 +573,32 @@ export async function actualizarDetalleAcceso(
     .maybeSingle();
   if (errLectura) throw errLectura;
   if (!fila) throw new Error("Cliente no encontrado");
-  const cliente = filaACliente(fila as ClienteRow);
+  const anterior = filaACliente(fila as ClienteRow).accesos;
 
-  const anterior = cliente.accesos[nivel];
-  const nuevoDetalle = { ...anterior };
-  if (cambios.cantidad !== undefined) {
-    nuevoDetalle.cantidad = Math.max(0, Math.floor(cambios.cantidad));
-    nuevoDetalle.activo = nuevoDetalle.cantidad > 0;
-  }
-  if (cambios.variante !== undefined) {
-    nuevoDetalle.variante = cambios.variante;
-  }
-  const nuevosAccesos = { ...cliente.accesos, [nivel]: nuevoDetalle };
+  const normalizado = (Object.keys(nuevosAccesos) as (keyof Accesos)[]).reduce((acc, nivel) => {
+    const cantidad = Math.max(0, Math.floor(nuevosAccesos[nivel].cantidad || 0));
+    acc[nivel] = {
+      activo: cantidad > 0,
+      cantidad,
+      variante: cantidad > 0 && nivel !== "black" ? nuevosAccesos[nivel].variante : null,
+    };
+    return acc;
+  }, {} as Accesos);
+
+  const cambios = (Object.keys(normalizado) as (keyof Accesos)[])
+    .filter((nivel) => JSON.stringify(anterior[nivel]) !== JSON.stringify(normalizado[nivel]))
+    .map((nivel) => `${ACCESO_LABEL[nivel]}: ${textoAcceso(anterior[nivel])} → ${textoAcceso(normalizado[nivel])}`);
 
   const { data, error } = await supabase
     .from("clientes")
-    .update({ accesos: nuevosAccesos, actualizado_en: new Date().toISOString() })
+    .update({ accesos: normalizado, actualizado_en: new Date().toISOString() })
     .eq("id", id)
     .select("*")
     .single();
   if (error) throw error;
 
-  if (anterior.cantidad !== nuevoDetalle.cantidad || anterior.variante !== nuevoDetalle.variante) {
-    await registrarEvento(
-      id,
-      ACCESO_TIPO[nivel],
-      `Acceso ${ACCESO_LABEL[nivel]} editado: ${anterior.cantidad}${anterior.variante ? " " + anterior.variante : ""} → ${nuevoDetalle.cantidad}${nuevoDetalle.variante ? " " + nuevoDetalle.variante : ""}`,
-      autor
-    );
+  if (cambios.length) {
+    await registrarEvento(id, "EDICION", `Accesos — ${cambios.join(" · ")}`, autor);
   }
   return filaACliente(data as ClienteRow);
 }

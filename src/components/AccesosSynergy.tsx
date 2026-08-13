@@ -1,6 +1,6 @@
 "use client";
 
-import { ShieldCheck, Crown, Gem, Loader2, Minus, Plus } from "lucide-react";
+import { ShieldCheck, Crown, Gem, Minus, Plus } from "lucide-react";
 import type { Accesos, Variante } from "@/lib/types";
 
 const NIVELES: {
@@ -33,89 +33,111 @@ const NIVELES: {
   },
 ];
 
+// Editor de cantidades de accesos (no on/off): cada nivel se controla con un
+// número exacto — llevarlo a 0 lo desactiva, subirlo desde 0 lo activa. Así
+// "quitarle 2 General y darle 2 VIP" o "sumarle 1 Black a alguien que ya
+// tiene 1 General" es simplemente escribir los números correspondientes en
+// cada tarjeta, sin que una toque a la otra.
 export function AccesosSynergy({
-  accesos,
-  pendiente,
-  onToggle,
-  editando,
-  onCambiarDetalle,
+  valor,
+  onChange,
   soloLectura,
+  paisCliente,
 }: {
-  accesos: Accesos;
-  pendiente: keyof Accesos | null;
-  onToggle: (nivel: keyof Accesos, activo: boolean) => void;
-  editando?: boolean;
-  onCambiarDetalle?: (nivel: keyof Accesos, cambios: { cantidad?: number; variante?: Variante }) => void;
-  // El switch principal (a diferencia del editor de cantidad/variante, que ya
-  // depende de `editando`) es clickeable siempre por defecto — soloLectura lo
-  // deshabilita para roles sin permiso de editar accesos.
+  valor: Accesos;
+  onChange: (nuevoValor: Accesos) => void;
   soloLectura?: boolean;
+  // Para elegir MX/US por default cuando un nivel pasa de 0 a activo.
+  paisCliente?: string | null;
 }) {
+  function cambiarCantidad(nivel: keyof Accesos, cantidad: number) {
+    const limpia = Math.max(0, Math.floor(cantidad || 0));
+    const actual = valor[nivel];
+    let variante = actual.variante;
+    if (limpia > 0 && !variante && nivel !== "black") {
+      const p = (paisCliente ?? "").toLowerCase();
+      variante = p.includes("méxico") || p.includes("mexico") ? "MX" : "US";
+    }
+    onChange({ ...valor, [nivel]: { activo: limpia > 0, cantidad: limpia, variante } });
+  }
+
+  function cambiarVariante(nivel: keyof Accesos, variante: Variante) {
+    onChange({ ...valor, [nivel]: { ...valor[nivel], variante } });
+  }
+
   return (
     <div className="grid grid-cols-3 gap-3">
       {NIVELES.map(({ key, label, icon: Icon, activeClass, tieneVariante }) => {
-        const detalle = accesos[key];
-        const activo = detalle.activo;
-        const cargando = pendiente === key;
+        const detalle = valor[key];
+        const activo = detalle.cantidad > 0;
         return (
-          <div key={key} className="flex flex-col gap-1.5">
-            <button
-              type="button"
-              disabled={cargando || soloLectura}
-              onClick={() => onToggle(key, !activo)}
-              aria-pressed={activo}
-              className={`ease-spring flex w-full flex-col items-center gap-2 rounded-2xl border px-3 py-5 text-center outline-none transition focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed ${
-                activo
-                  ? `${activeClass} border-transparent diffused`
-                  : "border-silver bg-surface-2 text-muted hover:border-silver-deep"
-              }`}
-            >
-              {cargando ? (
-                <Loader2 className="h-6 w-6 animate-spin" strokeWidth={1.75} />
-              ) : (
-                <Icon className="h-6 w-6" strokeWidth={1.75} />
-              )}
-              <span className="text-base font-semibold">{label}</span>
-              <span className={`text-sm uppercase tracking-wide ${activo ? "opacity-80" : "opacity-60"}`}>
-                {activo
-                  ? `${detalle.cantidad}${detalle.variante ? ` · ${detalle.variante}` : ""}`
-                  : "Sin acceso"}
-              </span>
-            </button>
+          <div
+            key={key}
+            className={`flex flex-col items-center gap-2 rounded-2xl border px-3 py-4 text-center transition ${
+              activo ? `${activeClass} border-transparent diffused` : "border-silver bg-surface-2 text-muted"
+            }`}
+          >
+            <Icon className="h-6 w-6" strokeWidth={1.75} />
+            <span className="text-sm font-semibold">{label}</span>
 
-            {editando && onCambiarDetalle && (
-              <div className="flex items-center justify-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => onCambiarDetalle(key, { cantidad: Math.max(0, detalle.cantidad - 1) })}
-                  className="ease-spring flex h-6 w-6 items-center justify-center rounded-md border border-silver text-muted transition hover:bg-surface-2"
-                  aria-label={`Restar ${label}`}
-                >
-                  <Minus className="h-3 w-3" strokeWidth={2} />
-                </button>
-                <span className="w-5 text-center text-xs font-medium text-foreground">{detalle.cantidad}</span>
-                <button
-                  type="button"
-                  onClick={() => onCambiarDetalle(key, { cantidad: detalle.cantidad + 1 })}
-                  className="ease-spring flex h-6 w-6 items-center justify-center rounded-md border border-silver text-muted transition hover:bg-surface-2"
-                  aria-label={`Sumar ${label}`}
-                >
-                  <Plus className="h-3 w-3" strokeWidth={2} />
-                </button>
-                {tieneVariante && (
+            {soloLectura ? (
+              <span className={`text-xs uppercase tracking-wide ${activo ? "opacity-80" : "opacity-60"}`}>
+                {activo ? `${detalle.cantidad}${detalle.variante ? ` · ${detalle.variante}` : ""}` : "Sin acceso"}
+              </span>
+            ) : (
+              <>
+                <div className="flex items-center justify-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => cambiarCantidad(key, detalle.cantidad - 1)}
+                    disabled={detalle.cantidad <= 0}
+                    className={`ease-spring flex h-6 w-6 items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                      activo ? "border-white/40 text-white hover:bg-white/10" : "border-silver text-muted hover:bg-surface"
+                    }`}
+                    aria-label={`Restar ${label}`}
+                  >
+                    <Minus className="h-3 w-3" strokeWidth={2} />
+                  </button>
+                  <input
+                    type="number"
+                    min={0}
+                    value={detalle.cantidad}
+                    onChange={(e) => cambiarCantidad(key, Number(e.target.value))}
+                    className={`w-12 rounded-md border bg-transparent py-0.5 text-center text-sm font-semibold outline-none ${
+                      activo ? "border-white/40 text-white" : "border-silver text-foreground"
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => cambiarCantidad(key, detalle.cantidad + 1)}
+                    className={`ease-spring flex h-6 w-6 items-center justify-center rounded-md border transition ${
+                      activo ? "border-white/40 text-white hover:bg-white/10" : "border-silver text-muted hover:bg-surface"
+                    }`}
+                    aria-label={`Sumar ${label}`}
+                  >
+                    <Plus className="h-3 w-3" strokeWidth={2} />
+                  </button>
+                </div>
+                {tieneVariante && activo && (
                   <select
                     value={detalle.variante ?? ""}
-                    onChange={(e) =>
-                      onCambiarDetalle(key, { variante: (e.target.value || null) as Variante })
-                    }
-                    className="ml-0.5 rounded-md border border-silver bg-surface px-1 py-0.5 text-[10px] text-foreground outline-none"
+                    onChange={(e) => cambiarVariante(key, (e.target.value || null) as Variante)}
+                    className={`rounded-md border bg-transparent px-1.5 py-0.5 text-[11px] outline-none ${
+                      activo ? "border-white/40 text-white" : "border-silver text-foreground"
+                    }`}
                   >
-                    <option value="">—</option>
-                    <option value="MX">MX</option>
-                    <option value="US">US</option>
+                    <option className="text-foreground" value="">
+                      —
+                    </option>
+                    <option className="text-foreground" value="MX">
+                      MX
+                    </option>
+                    <option className="text-foreground" value="US">
+                      US
+                    </option>
                   </select>
                 )}
-              </div>
+              </>
             )}
           </div>
         );

@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requerirPermiso } from "@/lib/auth";
-import {
-  actualizarAcceso,
-  actualizarDatosCliente,
-  actualizarDetalleAcceso,
-  actualizarTags,
-  obtenerCliente,
-} from "@/lib/db";
+import { actualizarAccesos, actualizarDatosCliente, actualizarTags, obtenerCliente } from "@/lib/db";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const permiso = await requerirPermiso("verClientes");
@@ -20,13 +14,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const body = await req.json();
-  // "acceso"/"acceso-detalle" (accesos/boletos) y "datos"/"tags" (datos del
+  // "accesos" (boletos General/VIP/Black) y "datos"/"tags" (datos del
   // cliente) requieren el mismo nivel de permiso hoy (editarCliente/
   // editarAccesos = solo admin), pero se validan por separado a propósito
   // para poder abrir uno sin el otro más adelante si hace falta.
-  const permiso = await requerirPermiso(
-    body?.tipo === "acceso" || body?.tipo === "acceso-detalle" ? "editarAccesos" : "editarCliente"
-  );
+  const permiso = await requerirPermiso(body?.tipo === "accesos" ? "editarAccesos" : "editarCliente");
   if (!permiso.ok) return permiso.respuesta;
   const autor = permiso.usuario.nombre;
 
@@ -34,18 +26,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const clienteId = decodeURIComponent(id);
 
   try {
-    if (body.tipo === "acceso") {
-      const cliente = await actualizarAcceso(clienteId, body.nivel, body.activo, autor);
-      return NextResponse.json({ cliente });
-    }
-
-    if (body.tipo === "acceso-detalle") {
-      const cliente = await actualizarDetalleAcceso(
-        clienteId,
-        body.nivel,
-        { cantidad: body.cantidad, variante: body.variante },
-        autor
-      );
+    if (body.tipo === "accesos") {
+      const cliente = await actualizarAccesos(clienteId, body.accesos, autor);
       return NextResponse.json({ cliente });
     }
 
