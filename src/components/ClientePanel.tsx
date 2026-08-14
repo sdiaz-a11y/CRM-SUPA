@@ -166,6 +166,7 @@ export function ClientePanel({
   const [perfilKajabi, setPerfilKajabi] = useState<PerfilKajabi | null>(null);
   const [cargandoPerfilKajabi, setCargandoPerfilKajabi] = useState(false);
   const [errorPerfilKajabi, setErrorPerfilKajabi] = useState<string | null>(null);
+  const [intentadoPerfilKajabi, setIntentadoPerfilKajabi] = useState(false);
 
   useEffect(() => {
     fetch("/api/biblioteca?tipo=tag")
@@ -183,6 +184,7 @@ export function ClientePanel({
     setPasoEliminar(0);
     setPerfilKajabi(null);
     setErrorPerfilKajabi(null);
+    setIntentadoPerfilKajabi(false);
     Promise.all([
       fetch(`/api/clientes/${encodeURIComponent(clienteId)}`).then((r) => r.json()),
       fetch(`/api/clientes/${encodeURIComponent(clienteId)}/eventos`).then((r) => r.json()),
@@ -207,7 +209,11 @@ export function ClientePanel({
   }, [clienteId]);
 
   useEffect(() => {
-    if (tab !== "kajabi" || perfilKajabi || cargandoPerfilKajabi) return;
+    // `intentadoPerfilKajabi` (no `perfilKajabi`) es lo que evita reintentar:
+    // si la consulta falla, perfilKajabi se queda en null para siempre, y
+    // usar esa variable en la guarda reintentaría en bucle infinito sin
+    // llegar nunca a mostrar el error.
+    if (tab !== "kajabi" || intentadoPerfilKajabi || cargandoPerfilKajabi) return;
     let cancelado = false;
     setCargandoPerfilKajabi(true);
     setErrorPerfilKajabi(null);
@@ -222,12 +228,15 @@ export function ClientePanel({
         if (!cancelado) setErrorPerfilKajabi("No se pudo consultar Kajabi");
       })
       .finally(() => {
-        if (!cancelado) setCargandoPerfilKajabi(false);
+        if (!cancelado) {
+          setCargandoPerfilKajabi(false);
+          setIntentadoPerfilKajabi(true);
+        }
       });
     return () => {
       cancelado = true;
     };
-  }, [tab, clienteId, perfilKajabi, cargandoPerfilKajabi]);
+  }, [tab, clienteId, intentadoPerfilKajabi, cargandoPerfilKajabi]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -1111,7 +1120,16 @@ export function ClientePanel({
                     {cargandoPerfilKajabi ? (
                       <p className="text-sm text-muted">Consultando en Kajabi…</p>
                     ) : errorPerfilKajabi ? (
-                      <p className="text-sm text-danger">{errorPerfilKajabi}</p>
+                      <div className="space-y-2">
+                        <p className="text-sm text-danger">{errorPerfilKajabi}</p>
+                        <button
+                          onClick={() => setIntentadoPerfilKajabi(false)}
+                          className="ease-spring flex items-center gap-1.5 rounded-lg border border-silver px-2.5 py-1 text-xs font-medium text-foreground transition hover:bg-surface-2"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.75} />
+                          Reintentar
+                        </button>
+                      </div>
                     ) : perfilKajabi && !perfilKajabi.encontrado ? (
                       <p className="text-sm text-muted">Este cliente todavía no tiene contacto en Kajabi.</p>
                     ) : perfilKajabi ? (
