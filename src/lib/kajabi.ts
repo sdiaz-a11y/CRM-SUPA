@@ -167,6 +167,118 @@ export async function estadoOfertaContacto(email: string, offerId: string): Prom
   return data.data.some((o) => o.id === offerId) ? "activa" : "revocada";
 }
 
+type ContactoPerfil = {
+  data: {
+    id: string;
+    attributes: {
+      name: string;
+      email: string;
+      address_line_1: string | null;
+      address_line_2: string | null;
+      address_city: string | null;
+      address_state: string | null;
+      address_zip: string | null;
+      address_country: string | null;
+      phone_number: string | null;
+      subscribed: boolean;
+    };
+    relationships: {
+      customer?: { data: { id: string } | null };
+    };
+  }[];
+};
+
+type CustomerDetalle = {
+  data: { attributes: { sign_in_count: number; last_request_at: string | null } };
+};
+
+type OfertaDetalle = {
+  data: { attributes: { title: string } };
+};
+
+export type PerfilKajabi = {
+  encontrado: boolean;
+  nombre: string | null;
+  email: string | null;
+  telefono: string | null;
+  direccion: {
+    calle1: string | null;
+    calle2: string | null;
+    ciudad: string | null;
+    estado: string | null;
+    codigoPostal: string | null;
+    pais: string | null;
+  } | null;
+  suscritoMarketing: boolean | null;
+  ofertas: { id: string; titulo: string }[];
+  signInCount: number | null;
+  ultimaActividad: string | null;
+};
+
+// Perfil completo para la pestaña "Perfil de Kajabi" del panel del cliente:
+// datos de contacto, dirección, suscripción a marketing, ofertas otorgadas
+// ahora mismo, y actividad (inicios de sesión / última vez que usó la
+// plataforma). Se busca en vivo por correo, no se guarda copia en el CRM.
+export async function obtenerPerfilKajabi(email: string): Promise<PerfilKajabi> {
+  const vacio: PerfilKajabi = {
+    encontrado: false,
+    nombre: null,
+    email: null,
+    telefono: null,
+    direccion: null,
+    suscritoMarketing: null,
+    ofertas: [],
+    signInCount: null,
+    ultimaActividad: null,
+  };
+
+  const params = new URLSearchParams({
+    "filter[site_id]": KAJABI_SITE_ID,
+    "filter[search]": email,
+  });
+  const busqueda = (await kajabiFetch(`/contacts?${params}`)) as ContactoPerfil;
+  const correoNormalizado = email.trim().toLowerCase();
+  const contacto = busqueda.data.find((c) => c.attributes.email?.trim().toLowerCase() === correoNormalizado);
+  if (!contacto) return vacio;
+
+  const [ofertasRes, customerRes] = await Promise.all([
+    kajabiFetch(`/contacts/${contacto.id}/relationships/offers`).catch(() => null) as Promise<OfertasContacto | null>,
+    contacto.relationships.customer?.data?.id
+      ? (kajabiFetch(`/customers/${contacto.relationships.customer.data.id}`).catch(() => null) as Promise<CustomerDetalle | null>)
+      : Promise.resolve(null),
+  ]);
+
+  const ofertas = await Promise.all(
+    (ofertasRes?.data ?? []).map(async (o) => {
+      try {
+        const detalle = (await kajabiFetch(`/offers/${o.id}`)) as OfertaDetalle;
+        return { id: o.id, titulo: detalle.data.attributes.title };
+      } catch {
+        return { id: o.id, titulo: `Oferta ${o.id}` };
+      }
+    })
+  );
+
+  return {
+    encontrado: true,
+    nombre: contacto.attributes.name,
+    email: contacto.attributes.email,
+    telefono: contacto.attributes.phone_number,
+    direccion: {
+      calle1: contacto.attributes.address_line_1,
+      calle2: contacto.attributes.address_line_2,
+      ciudad: contacto.attributes.address_city,
+      estado: contacto.attributes.address_state,
+      codigoPostal: contacto.attributes.address_zip,
+      pais: contacto.attributes.address_country,
+    },
+    suscritoMarketing: contacto.attributes.subscribed,
+    ofertas,
+    signInCount: customerRes?.data.attributes.sign_in_count ?? null,
+    ultimaActividad: customerRes?.data.attributes.last_request_at ?? null,
+  };
+}
+
 // --- Sincronización por consulta periódica (reemplaza al webhook nativo,
 // cuyo permiso "Webhooks" no está disponible para esta API key) ---
 //

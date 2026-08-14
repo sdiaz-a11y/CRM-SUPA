@@ -30,6 +30,11 @@ import {
   RefreshCw,
   AlertTriangle,
   Trash2,
+  IdCard,
+  MapPin,
+  LogIn,
+  Clock,
+  Mail,
 } from "lucide-react";
 import type { Accesos, Cliente, EventoTimeline } from "@/lib/types";
 import { ESTADOS_MENSAJE_BIENVENIDA_WA } from "@/lib/types";
@@ -37,13 +42,15 @@ import { useSesion } from "@/lib/session-context";
 import { tienePermiso } from "@/lib/permisos";
 import { AccesosSynergy } from "./AccesosSynergy";
 import { Timeline } from "./Timeline";
+import type { PerfilKajabi } from "@/lib/kajabi";
 
-type Tab = "resumen" | "accesos" | "seguimiento" | "notas" | "actividad";
+type Tab = "resumen" | "accesos" | "seguimiento" | "notas" | "actividad" | "kajabi";
 
 const TABS: { key: Tab; label: string; icon: typeof User }[] = [
   { key: "resumen", label: "Resumen", icon: LayoutGrid },
   { key: "accesos", label: "Accesos", icon: ShieldCheck },
   { key: "seguimiento", label: "Seguimiento", icon: ClipboardList },
+  { key: "kajabi", label: "Perfil de Kajabi", icon: IdCard },
   { key: "notas", label: "Notas", icon: StickyNote },
   { key: "actividad", label: "Actividad", icon: Activity },
 ];
@@ -95,6 +102,13 @@ const ACCESO_LABEL: Record<keyof Accesos, string> = {
   vip: "VIP",
   black: "Black Access",
 };
+
+function formatearDireccion(d: PerfilKajabi["direccion"]): string[] {
+  if (!d) return [];
+  const linea1 = [d.calle1, d.calle2].filter(Boolean).join(", ");
+  const linea2 = [d.ciudad, d.estado, d.codigoPostal].filter(Boolean).join(", ");
+  return [linea1, linea2, d.pais].filter((l): l is string => !!l);
+}
 
 function textoAcceso(d: Accesos[keyof Accesos]): string {
   return d.activo && d.cantidad > 0 ? `${d.cantidad}${d.variante ? ` · ${d.variante}` : ""}` : "Sin acceso";
@@ -149,6 +163,9 @@ export function ClientePanel({
   const [eliminando, setEliminando] = useState(false);
   const [pasoEnviarWa, setPasoEnviarWa] = useState<0 | 1>(0);
   const [enviandoWa, setEnviandoWa] = useState(false);
+  const [perfilKajabi, setPerfilKajabi] = useState<PerfilKajabi | null>(null);
+  const [cargandoPerfilKajabi, setCargandoPerfilKajabi] = useState(false);
+  const [errorPerfilKajabi, setErrorPerfilKajabi] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/biblioteca?tipo=tag")
@@ -164,6 +181,8 @@ export function ClientePanel({
     setEstadoKajabi("cargando");
     setPasoRenovar(0);
     setPasoEliminar(0);
+    setPerfilKajabi(null);
+    setErrorPerfilKajabi(null);
     Promise.all([
       fetch(`/api/clientes/${encodeURIComponent(clienteId)}`).then((r) => r.json()),
       fetch(`/api/clientes/${encodeURIComponent(clienteId)}/eventos`).then((r) => r.json()),
@@ -186,6 +205,29 @@ export function ClientePanel({
       cancelado = true;
     };
   }, [clienteId]);
+
+  useEffect(() => {
+    if (tab !== "kajabi" || perfilKajabi || cargandoPerfilKajabi) return;
+    let cancelado = false;
+    setCargandoPerfilKajabi(true);
+    setErrorPerfilKajabi(null);
+    fetch(`/api/clientes/${encodeURIComponent(clienteId)}/kajabi-perfil`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelado) return;
+        if (data.perfil) setPerfilKajabi(data.perfil);
+        else setErrorPerfilKajabi(data.error ?? "No se pudo consultar Kajabi");
+      })
+      .catch(() => {
+        if (!cancelado) setErrorPerfilKajabi("No se pudo consultar Kajabi");
+      })
+      .finally(() => {
+        if (!cancelado) setCargandoPerfilKajabi(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [tab, clienteId, perfilKajabi, cargandoPerfilKajabi]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -1061,6 +1103,82 @@ export function ClientePanel({
                     </div>
                   )}
                 </Tarjeta>
+              )}
+
+              {tab === "kajabi" && (
+                <div className="space-y-5">
+                  <Tarjeta titulo="Perfil de Kajabi">
+                    {cargandoPerfilKajabi ? (
+                      <p className="text-sm text-muted">Consultando en Kajabi…</p>
+                    ) : errorPerfilKajabi ? (
+                      <p className="text-sm text-danger">{errorPerfilKajabi}</p>
+                    ) : perfilKajabi && !perfilKajabi.encontrado ? (
+                      <p className="text-sm text-muted">Este cliente todavía no tiene contacto en Kajabi.</p>
+                    ) : perfilKajabi ? (
+                      <dl className="space-y-2.5 text-sm">
+                        <CampoValor label="Nombre en Kajabi" valor={perfilKajabi.nombre} />
+                        <DatoFila icon={Mail} label="Correo" valor={perfilKajabi.email} />
+                        <DatoFila icon={Phone} label="Teléfono" valor={perfilKajabi.telefono} />
+                        <DatoFila
+                          icon={MapPin}
+                          label="Dirección"
+                          valor={formatearDireccion(perfilKajabi.direccion).join(" · ") || null}
+                        />
+                        <CampoValor
+                          label="Suscrito a marketing"
+                          valor={
+                            perfilKajabi.suscritoMarketing === null
+                              ? null
+                              : perfilKajabi.suscritoMarketing
+                                ? "Sí"
+                                : "No"
+                          }
+                        />
+                      </dl>
+                    ) : null}
+                  </Tarjeta>
+
+                  {!cargandoPerfilKajabi && perfilKajabi?.encontrado && (
+                    <>
+                      <Tarjeta titulo="Ofertas otorgadas actualmente">
+                        {perfilKajabi.ofertas.length === 0 ? (
+                          <p className="text-sm text-muted">No tiene ninguna oferta otorgada ahora mismo.</p>
+                        ) : (
+                          <ul className="space-y-1.5">
+                            {perfilKajabi.ofertas.map((o) => (
+                              <li key={o.id} className="flex items-center gap-2 text-sm text-foreground">
+                                <ShieldCheck className="h-3.5 w-3.5 flex-none text-success" strokeWidth={1.75} />
+                                {o.titulo}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </Tarjeta>
+
+                      <Tarjeta titulo="Actividad en la plataforma">
+                        <dl className="space-y-2.5 text-sm">
+                          <DatoFila
+                            icon={LogIn}
+                            label="Inicios de sesión"
+                            valor={perfilKajabi.signInCount === null ? null : String(perfilKajabi.signInCount)}
+                          />
+                          <DatoFila
+                            icon={Clock}
+                            label="Última actividad"
+                            valor={
+                              perfilKajabi.ultimaActividad
+                                ? new Date(perfilKajabi.ultimaActividad).toLocaleString("es-MX", {
+                                    dateStyle: "medium",
+                                    timeStyle: "short",
+                                  })
+                                : null
+                            }
+                          />
+                        </dl>
+                      </Tarjeta>
+                    </>
+                  )}
+                </div>
               )}
 
               {tab === "notas" && (
