@@ -213,7 +213,14 @@ export function ClientePanel({
     // si la consulta falla, perfilKajabi se queda en null para siempre, y
     // usar esa variable en la guarda reintentaría en bucle infinito sin
     // llegar nunca a mostrar el error.
-    if (tab !== "kajabi" || intentadoPerfilKajabi || cargandoPerfilKajabi) return;
+    //
+    // Importante: `cargandoPerfilKajabi` NO va en las dependencias. Este
+    // mismo efecto lo pone en `true` al arrancar, y si estuviera en la
+    // lista, ese cambio dispararía la limpieza del efecto (cancelado=true)
+    // casi de inmediato — la respuesta real llega después, pero se ignora
+    // porque `cancelado` ya quedó en true. Por eso se quedaba en
+    // "Consultando…" para siempre aunque la petición sí terminaba con 200.
+    if (tab !== "kajabi" || intentadoPerfilKajabi) return;
     let cancelado = false;
     setCargandoPerfilKajabi(true);
     setErrorPerfilKajabi(null);
@@ -236,7 +243,7 @@ export function ClientePanel({
     return () => {
       cancelado = true;
     };
-  }, [tab, clienteId, intentadoPerfilKajabi, cargandoPerfilKajabi]);
+  }, [tab, clienteId, intentadoPerfilKajabi]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
