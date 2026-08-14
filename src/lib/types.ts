@@ -60,6 +60,12 @@ export type Cliente = {
   // intactas.
   eliminadoEn: string | null;
 
+  // Pausa de membresía: si tiene fecha, el acceso está revocado en Kajabi a
+  // propósito (no vencido). finAccesoAlPausar es la foto de finAcceso justo
+  // al pausar, para calcular los días restantes al reanudar.
+  pausadoEn: string | null;
+  finAccesoAlPausar: string | null;
+
   creadoEn: string; // ISO
   actualizadoEn: string; // ISO
 };

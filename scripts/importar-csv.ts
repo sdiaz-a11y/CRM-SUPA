@@ -122,6 +122,8 @@ async function main() {
       tags: existente?.tags ?? [],
       kajabiContactId: existente?.kajabiContactId ?? null,
       eliminadoEn: existente?.eliminadoEn ?? null,
+      pausadoEn: existente?.pausadoEn ?? null,
+      finAccesoAlPausar: existente?.finAccesoAlPausar ?? null,
       creadoEn: existente?.creadoEn ?? ahora,
       actualizadoEn: ahora,
     };

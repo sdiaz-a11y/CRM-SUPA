@@ -152,6 +152,21 @@ export async function eliminarContacto(email: string): Promise<void> {
   await kajabiFetch(`/contacts/${contactId}`, { method: "DELETE" });
 }
 
+// Revoca la oferta sin borrar el contacto (usado por "Pausar membresía").
+// Si no tiene contacto o no tenía la oferta, no hay nada que hacer.
+export async function revocarOferta(email: string, offerId: string): Promise<void> {
+  const contactId = await buscarContactoPorCorreo(email);
+  if (!contactId) return;
+  try {
+    await kajabiFetch(`/contacts/${contactId}/relationships/offers`, {
+      method: "DELETE",
+      body: JSON.stringify({ data: [{ type: "offers", id: offerId }] }),
+    });
+  } catch {
+    // No tenía la oferta activa — nada que revocar.
+  }
+}
+
 export type EstadoOferta = "activa" | "revocada" | "sin_contacto";
 
 type OfertasContacto = { data: { id: string }[] };

@@ -35,6 +35,8 @@ import {
   LogIn,
   Clock,
   Mail,
+  PauseCircle,
+  PlayCircle,
 } from "lucide-react";
 import type { Accesos, Cliente, EventoTimeline } from "@/lib/types";
 import { ESTADOS_MENSAJE_BIENVENIDA_WA } from "@/lib/types";
@@ -139,6 +141,7 @@ export function ClientePanel({
   const puedeAgregarNota = !!usuario && tienePermiso(usuario.rol, "agregarNota");
   const puedeEliminar = !!usuario && tienePermiso(usuario.rol, "eliminarCliente");
   const puedeRenovar = !!usuario && tienePermiso(usuario.rol, "renovarMembresia");
+  const puedePausar = !!usuario && tienePermiso(usuario.rol, "pausarMembresia");
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [eventos, setEventos] = useState<EventoTimeline[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -163,6 +166,10 @@ export function ClientePanel({
   const [eliminando, setEliminando] = useState(false);
   const [pasoEnviarWa, setPasoEnviarWa] = useState<0 | 1>(0);
   const [enviandoWa, setEnviandoWa] = useState(false);
+  const [pasoPausar, setPasoPausar] = useState<0 | 1>(0);
+  const [pausando, setPausando] = useState(false);
+  const [pasoReanudar, setPasoReanudar] = useState<0 | 1>(0);
+  const [reanudando, setReanudando] = useState(false);
   const [perfilKajabi, setPerfilKajabi] = useState<PerfilKajabi | null>(null);
   const [cargandoPerfilKajabi, setCargandoPerfilKajabi] = useState(false);
   const [errorPerfilKajabi, setErrorPerfilKajabi] = useState<string | null>(null);
@@ -182,6 +189,8 @@ export function ClientePanel({
     setEstadoKajabi("cargando");
     setPasoRenovar(0);
     setPasoEliminar(0);
+    setPasoPausar(0);
+    setPasoReanudar(0);
     setPerfilKajabi(null);
     setErrorPerfilKajabi(null);
     setIntentadoPerfilKajabi(false);
@@ -347,6 +356,71 @@ export function ClientePanel({
     setForm(formDeCliente(data.cliente));
     onClienteActualizado(data.cliente);
     setEstadoKajabi(data.avisoKajabi ? "revocada" : "activa");
+    const eventosRes = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/eventos`).then((r) =>
+      r.json()
+    );
+    setEventos(eventosRes.eventos ?? []);
+  }
+
+  async function confirmarPausar() {
+    if (!cliente || !puedePausar) return;
+    if (pasoPausar < 1) {
+      setPasoPausar(1);
+      return;
+    }
+    setPausando(true);
+    setError(null);
+    const res = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/pausar`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    setPausando(false);
+    setPasoPausar(0);
+    if (!res.ok) {
+      setError(data.error ?? "No se pudo pausar la membresía");
+      return;
+    }
+    if (data.avisoKajabi) {
+      window.alert(`La membresía se pausó en el CRM, pero no se pudo revocar en Kajabi: ${data.avisoKajabi}`);
+    }
+    setCliente(data.cliente);
+    onClienteActualizado(data.cliente);
+    setEstadoKajabi("revocada");
+    const eventosRes = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/eventos`).then((r) =>
+      r.json()
+    );
+    setEventos(eventosRes.eventos ?? []);
+  }
+
+  async function confirmarReanudar() {
+    if (!cliente || !puedePausar) return;
+    if (pasoReanudar < 1) {
+      setPasoReanudar(1);
+      return;
+    }
+    setReanudando(true);
+    setError(null);
+    const res = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/reanudar`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    setReanudando(false);
+    setPasoReanudar(0);
+    if (!res.ok) {
+      setError(data.error ?? "No se pudo reanudar la membresía");
+      return;
+    }
+    setCliente(data.cliente);
+    setForm(formDeCliente(data.cliente));
+    onClienteActualizado(data.cliente);
+    if (data.avisoKajabi) {
+      window.alert(`No se pudo otorgar el acceso en Kajabi al reanudar: ${data.avisoKajabi}`);
+    } else {
+      setEstadoKajabi("activa");
+      window.alert(
+        `Recuerda cambiar la fecha de vencimiento en Kajabi a: ${new Date(data.fechaCalculada).toLocaleDateString("es-MX")} (le quedaban ${data.diasRestantes} días cuando se pausó).`
+      );
+    }
     const eventosRes = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/eventos`).then((r) =>
       r.json()
     );
@@ -824,22 +898,98 @@ export function ClientePanel({
               {tab === "accesos" && (
                 <div className="space-y-5">
                   <Tarjeta titulo="Estado en Kajabi">
-                    {estadoKajabi === "cargando" && (
-                      <p className="text-sm text-muted">Consultando en Kajabi…</p>
-                    )}
-                    {estadoKajabi === "activa" && (
-                      <p className="flex items-center gap-1.5 text-sm text-success">
-                        <Check className="h-4 w-4" strokeWidth={2} />
-                        Oferta activa en Kajabi
-                      </p>
-                    )}
-                    {estadoKajabi === "sin_contacto" && (
-                      <p className="text-sm text-muted">Todavía no tiene contacto en Kajabi.</p>
-                    )}
-                    {estadoKajabi === "error" && (
-                      <p className="text-sm text-muted">No se pudo verificar el estado en Kajabi.</p>
-                    )}
-                    {estadoKajabi === "revocada" && (
+                    {cliente.pausadoEn ? (
+                      <div className="space-y-3">
+                        <p className="flex items-center gap-1.5 text-sm text-warning">
+                          <PauseCircle className="h-4 w-4" strokeWidth={1.75} />
+                          Membresía pausada desde el{" "}
+                          {new Date(cliente.pausadoEn).toLocaleDateString("es-MX")} — acceso revocado en Kajabi.
+                        </p>
+                        {!puedePausar ? null : pasoReanudar === 0 && (
+                          <button
+                            onClick={confirmarReanudar}
+                            className="ease-spring flex items-center gap-1.5 rounded-lg brand-plate px-3 py-1.5 text-xs font-medium text-white transition"
+                          >
+                            <PlayCircle className="h-3.5 w-3.5" strokeWidth={1.75} />
+                            Reanudar membresía
+                          </button>
+                        )}
+                        {pasoReanudar === 1 && (
+                          <div className="rounded-lg border border-primary/30 bg-primary-dim/40 p-3">
+                            <p className="mb-2.5 text-xs text-foreground">
+                              Esto va a otorgar de nuevo la oferta en Kajabi y a recalcular Fin de acceso en el
+                              CRM según los días que le quedaban cuando se pausó. ¿Confirmas?
+                            </p>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => setPasoReanudar(0)}
+                                className="ease-spring rounded-lg border border-silver px-3 py-1.5 text-xs font-medium text-muted transition hover:text-foreground"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                onClick={confirmarReanudar}
+                                disabled={reanudando}
+                                className="ease-spring rounded-lg brand-plate px-3 py-1.5 text-xs font-medium text-white transition disabled:opacity-50"
+                              >
+                                {reanudando ? "Reanudando…" : "Sí, reanudar"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        {estadoKajabi === "cargando" && (
+                          <p className="text-sm text-muted">Consultando en Kajabi…</p>
+                        )}
+                        {estadoKajabi === "activa" && (
+                          <div className="space-y-3">
+                            <p className="flex items-center gap-1.5 text-sm text-success">
+                              <Check className="h-4 w-4" strokeWidth={2} />
+                              Oferta activa en Kajabi
+                            </p>
+                            {!puedePausar ? null : pasoPausar === 0 && (
+                              <button
+                                onClick={confirmarPausar}
+                                className="ease-spring flex items-center gap-1.5 rounded-lg border border-silver px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-surface-2"
+                              >
+                                <PauseCircle className="h-3.5 w-3.5" strokeWidth={1.75} />
+                                Pausar membresía
+                              </button>
+                            )}
+                            {pasoPausar === 1 && (
+                              <div className="rounded-lg border border-danger/30 bg-danger/5 p-3">
+                                <p className="mb-2.5 text-xs text-foreground">
+                                  Esto va a revocar el acceso en Kajabi ahora mismo. Los días que le quedan se
+                                  guardan para cuando se reanude. ¿Confirmas?
+                                </p>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => setPasoPausar(0)}
+                                    className="ease-spring rounded-lg border border-silver px-3 py-1.5 text-xs font-medium text-muted transition hover:text-foreground"
+                                  >
+                                    Cancelar
+                                  </button>
+                                  <button
+                                    onClick={confirmarPausar}
+                                    disabled={pausando}
+                                    className="ease-spring rounded-lg bg-danger px-3 py-1.5 text-xs font-medium text-white transition disabled:opacity-50"
+                                  >
+                                    {pausando ? "Pausando…" : "Sí, pausar"}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {estadoKajabi === "sin_contacto" && (
+                          <p className="text-sm text-muted">Todavía no tiene contacto en Kajabi.</p>
+                        )}
+                        {estadoKajabi === "error" && (
+                          <p className="text-sm text-muted">No se pudo verificar el estado en Kajabi.</p>
+                        )}
+                        {estadoKajabi === "revocada" && (
                       <div className="space-y-3">
                         <p className="flex items-center gap-1.5 text-sm text-danger">
                           <AlertTriangle className="h-4 w-4" strokeWidth={1.75} />
@@ -900,6 +1050,8 @@ export function ClientePanel({
                           </div>
                         )}
                       </div>
+                    )}
+                      </>
                     )}
                   </Tarjeta>
 

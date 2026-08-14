@@ -430,6 +430,93 @@ export async function renovarMembresia(id: string, autor: string): Promise<Clien
   return filaACliente(data as ClienteRow);
 }
 
+// Días completos entre dos fechas ISO, usando componentes de fecha (no
+// horas/minutos) para no arrastrar diferencias de horario — mismo criterio
+// que finDeAccesoDentroDeUnAnio.
+function diasEntreFechas(desdeIso: string, hastaIso: string): number {
+  const a = new Date(desdeIso);
+  const b = new Date(hastaIso);
+  const inicioA = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+  const inicioB = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.round((inicioB - inicioA) / 86400000);
+}
+
+// Pausa de membresía (botón "Pausar" en el perfil): solo marca la pausa y
+// congela cuántos días le quedaban — revocar la oferta en Kajabi lo hace la
+// ruta de la API por separado, este función es la parte pura del CRM.
+export async function pausarMembresia(id: string, autor: string): Promise<Cliente> {
+  const { data: fila, error: errLectura } = await supabase
+    .from("clientes")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (errLectura) throw errLectura;
+  if (!fila) throw new Error("Cliente no encontrado");
+  const cliente = filaACliente(fila as ClienteRow);
+  if (cliente.pausadoEn) throw new Error("Este cliente ya está pausado");
+
+  const ahora = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("clientes")
+    .update({ pausado_en: ahora, fin_acceso_al_pausar: cliente.finAcceso, actualizado_en: ahora })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+
+  await registrarEvento(id, "EDICION", `Membresía pausada por ${autor}`, autor);
+  return filaACliente(data as ClienteRow);
+}
+
+export type ResultadoReanudar = { cliente: Cliente; fechaCalculada: string; diasRestantes: number };
+
+// Reanuda una membresía pausada: calcula cuántos días le quedaban cuando se
+// pausó (fin_acceso_al_pausar − pausado_en) y se los suma a partir de hoy —
+// no le regala un año completo de nuevo. El re-otorgamiento en Kajabi (que
+// sí arranca su propio contador de 365 días, no editable por API) lo hace
+// la ruta de la API; por eso el aviso al usuario para que lo corrija a mano.
+export async function reanudarMembresia(id: string, autor: string): Promise<ResultadoReanudar> {
+  const { data: fila, error: errLectura } = await supabase
+    .from("clientes")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (errLectura) throw errLectura;
+  if (!fila) throw new Error("Cliente no encontrado");
+  const cliente = filaACliente(fila as ClienteRow);
+  if (!cliente.pausadoEn) throw new Error("Este cliente no está pausado");
+
+  const finAlPausar = cliente.finAccesoAlPausar ?? cliente.pausadoEn;
+  const diasRestantes = Math.max(0, diasEntreFechas(cliente.pausadoEn, finAlPausar));
+
+  const ahora = new Date();
+  const fechaCalculada = new Date(
+    Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), ahora.getUTCDate() + diasRestantes)
+  ).toISOString();
+
+  const { data, error } = await supabase
+    .from("clientes")
+    .update({
+      pausado_en: null,
+      fin_acceso_al_pausar: null,
+      fin_acceso: fechaCalculada,
+      actualizado_en: ahora.toISOString(),
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+
+  await registrarEvento(
+    id,
+    "EDICION",
+    `Membresía reanudada por ${autor} — ${diasRestantes} días restantes, fin de acceso recalculado a ${formatearFechaSkool(new Date(fechaCalculada))}`,
+    autor
+  );
+
+  return { cliente: filaACliente(data as ClienteRow), fechaCalculada, diasRestantes };
+}
+
 const CAMPOS_EDITABLES: { key: keyof CambiosDatosCliente; columna: string; label: string }[] = [
   { key: "nombre", columna: "nombre", label: "Nombre" },
   { key: "telefono", columna: "telefono", label: "Teléfono" },

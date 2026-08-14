@@ -18,6 +18,7 @@ export const PERMISOS = {
   editarAccesos: ["admin"],
   eliminarCliente: ["admin"],
   renovarMembresia: ["admin"],
+  pausarMembresia: ["admin"],
   agregarNota: ["admin", "coordinador"],
   exportarCsv: ["admin", "coordinador"],
   importarCsv: ["admin"],

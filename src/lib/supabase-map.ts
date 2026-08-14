@@ -32,6 +32,8 @@ export type ClienteRow = {
   tags: string[];
   kajabi_contact_id: string | null;
   eliminado_en: string | null;
+  pausado_en: string | null;
+  fin_acceso_al_pausar: string | null;
   creado_en: string;
   actualizado_en: string;
 };
@@ -63,6 +65,8 @@ export function filaACliente(r: ClienteRow): Cliente {
     tags: r.tags ?? [],
     kajabiContactId: r.kajabi_contact_id,
     eliminadoEn: r.eliminado_en,
+    pausadoEn: r.pausado_en,
+    finAccesoAlPausar: r.fin_acceso_al_pausar,
     creadoEn: r.creado_en,
     actualizadoEn: r.actualizado_en,
   };

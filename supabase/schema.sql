@@ -231,3 +231,10 @@ create table if not exists usuarios (
   ultimo_login timestamptz
 );
 alter table usuarios enable row level security;
+
+-- Pausa de membresía: revoca el acceso en Kajabi de inmediato pero "congela"
+-- los días que le quedaban, para que al reanudar no se le regale un año
+-- completo de nuevo. fin_acceso_al_pausar es una foto de fin_acceso tomada
+-- justo al pausar — de ahí se calculan los días restantes al reanudar.
+alter table clientes add column if not exists pausado_en timestamptz;
+alter table clientes add column if not exists fin_acceso_al_pausar timestamptz;
