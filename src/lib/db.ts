@@ -281,6 +281,11 @@ export async function crearCliente(input: {
       // Fecha de alta: siempre el momento real de creación, igual que el
       // resto del CRM (nunca se captura a mano en este formulario).
       fecha_inscripcion: new Date().toISOString(),
+      // El alta en Kajabi otorga la oferta ahora mismo (365 días desde hoy),
+      // así que el CRM tiene que reflejarlo desde el minuto uno — si se deja
+      // vacío, "Pausar/Reanudar" y el cálculo de accesos no tienen de dónde
+      // partir.
+      fin_acceso: finDeAccesoDentroDeUnAnio(),
       evento,
       tipo_membresia: input.tipoMembresia?.trim() || null,
       etiqueta: input.etiqueta?.trim() || null,
@@ -486,7 +491,15 @@ export async function reanudarMembresia(id: string, autor: string): Promise<Resu
   const cliente = filaACliente(fila as ClienteRow);
   if (!cliente.pausadoEn) throw new Error("Este cliente no está pausado");
 
-  const finAlPausar = cliente.finAccesoAlPausar ?? cliente.pausadoEn;
+  // Respaldo por si finAccesoAlPausar quedó vacío (clientes creados antes de
+  // que el alta empezara a guardar fin_acceso): se recalcula desde fecha de
+  // inscripción + 365 días en vez de asumir 0 días restantes, que sería
+  // castigar al cliente por un hueco de datos que no es su culpa.
+  const finAlPausar =
+    cliente.finAccesoAlPausar ??
+    (cliente.fechaInscripcion
+      ? new Date(new Date(cliente.fechaInscripcion).getTime() + 365 * 86400000).toISOString()
+      : cliente.pausadoEn);
   const diasRestantes = Math.max(0, diasEntreFechas(cliente.pausadoEn, finAlPausar));
 
   const ahora = new Date();
