@@ -8,9 +8,10 @@ import { COOKIE_SESION, verificarTokenSesion } from "@/lib/jwt-edge";
 const RUTAS_PUBLICAS_EXACTAS = ["/login"];
 const PREFIJOS_PUBLICOS_API = [
   "/api/auth/login",
-  // Kajabi no firma sus webhooks; se autentican con su propio ?token=,
-  // igual que el cron — no llevan cookie de sesión.
+  // Kajabi y Hotmart no firman sus webhooks con cookie de sesión; se
+  // autentican con su propio ?token=, igual que el cron.
   "/api/webhooks/kajabi",
+  "/api/webhooks/hotmart",
   "/api/cron/sincronizar-kajabi",
 ];
 
