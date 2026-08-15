@@ -19,6 +19,17 @@ import { extraerDatosHotmart } from "@/lib/hotmart";
 // (cada ~15 min) casi siempre crea al cliente DESPUÉS de que este webhook ya
 // llegó, así que lo normal es no encontrar al cliente todavía — se guarda en
 // espera (hotmart_pendientes) y el sincronizador lo recoge al crearlo.
+// TEMPORAL — solo para diagnosticar el 401: confirma si la función ve la
+// variable de entorno, sin exponerla completa. Se quita después.
+export async function GET() {
+  const secret = process.env.HOTMART_WEBHOOK_SECRET;
+  return NextResponse.json({
+    definido: !!secret,
+    longitud: secret?.length ?? 0,
+    vistaPrevia: secret ? `${secret.slice(0, 4)}...${secret.slice(-4)}` : null,
+  });
+}
+
 export async function POST(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token");
   if (!token || token !== process.env.HOTMART_WEBHOOK_SECRET) {
