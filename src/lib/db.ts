@@ -340,6 +340,21 @@ export async function marcarMensajeBienvenidaWa(
   return filaACliente(data as ClienteRow);
 }
 
+// Completa el teléfono cuando llegó después del alta (típicamente el
+// webhook de Hotmart, que trae el dato que Kajabi no pasa). Solo se usa
+// cuando el cliente todavía no tenía teléfono — no pisa uno ya capturado.
+export async function actualizarTelefonoCliente(id: string, telefono: string): Promise<Cliente> {
+  const { data, error } = await supabase
+    .from("clientes")
+    .update({ telefono: normalizarTelefono(telefono), actualizado_en: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  await registrarEvento(id, "EDICION", "Teléfono completado desde Hotmart", "Hotmart");
+  return filaACliente(data as ClienteRow);
+}
+
 // Recalcula General/VIP/Black con el motor de reglas (REGLAS-BOLETOS-
 // SYNERGY.md) a partir de evento + tipo de membresía + acceso a
 // plataforma ya guardados. Se llama tras confirmar el acceso en Kajabi,
@@ -767,32 +782,56 @@ export async function vincularKajabiContactId(id: string, kajabiContactId: strin
   if (error) throw error;
 }
 
+export type ResultadoRegistrarTagKajabi = { cliente: Cliente; esNuevo: boolean };
+
 // Registra en la timeline que a un cliente se le asignó un tag de Kajabi.
 // Dos caminos llegan aquí para el mismo hecho real (el alta del CRM, que
 // sabe que otorgar la oferta dispara el tag; y el aviso de Kajabi/Zapier,
 // para altas que pasan por fuera del CRM) — por eso es idempotente: si ya
 // hay un evento de este mismo tag para este cliente, no lo duplica. Si el
-// correo no existe todavía en el CRM (alta directo en Kajabi) se crea el
-// cliente primero, para que el tag tenga dónde caer.
-export async function registrarTagKajabi(email: string, nombre: string, tagNombre: string): Promise<void> {
+// correo no existe todavía en el CRM (alta directo en Kajabi, típicamente
+// una compra por Hotmart que Kajabi detecta solo) se crea el cliente
+// primero, tomando el teléfono en espera de Hotmart si ya llegó (ver
+// hotmart_pendientes) — devuelve si el cliente es nuevo para que quien
+// llama decida si hace falta invitar a Skool / mandar WhatsApp.
+export async function registrarTagKajabi(
+  email: string,
+  nombre: string,
+  tagNombre: string
+): Promise<ResultadoRegistrarTagKajabi> {
   const id = normalizarEmail(email);
   const { data: existente, error: errLectura } = await supabase
     .from("clientes")
-    .select("id")
+    .select("*")
     .eq("id", id)
     .maybeSingle();
   if (errLectura) throw errLectura;
 
-  if (!existente) {
+  let cliente: Cliente;
+  let esNuevo = false;
+
+  if (existente) {
+    cliente = filaACliente(existente as ClienteRow);
+  } else {
+    esNuevo = true;
     const region = await regionParaCrearOEditar(null, null);
-    const { error } = await supabase.from("clientes").insert({
-      id,
-      nombre: nombre?.trim() || id,
-      email: id,
-      orden_csv: Date.now(),
-      region,
-    });
+    const telefonoPendiente = await tomarTelefonoPendienteHotmart(id);
+    const { data, error } = await supabase
+      .from("clientes")
+      .insert({
+        id,
+        nombre: nombre?.trim() || id,
+        email: id,
+        telefono: telefonoPendiente,
+        fecha_inscripcion: new Date().toISOString(),
+        fin_acceso: finDeAccesoDentroDeUnAnio(),
+        orden_csv: Date.now(),
+        region,
+      })
+      .select("*")
+      .single();
     if (error) throw error;
+    cliente = filaACliente(data as ClienteRow);
     await registrarEvento(id, "CREACION", "Cliente creado automáticamente desde Kajabi", "Kajabi");
   }
 
@@ -805,9 +844,39 @@ export async function registrarTagKajabi(email: string, nombre: string, tagNombr
     .eq("detalle", detalle)
     .maybeSingle();
   if (errDup) throw errDup;
-  if (yaRegistrado) return;
+  if (!yaRegistrado) {
+    await registrarEvento(id, "KAJABI", detalle, "Kajabi");
+  }
 
-  await registrarEvento(id, "KAJABI", detalle, "Kajabi");
+  return { cliente, esNuevo };
+}
+
+// --- Teléfonos de Hotmart en espera (ver hotmart_pendientes en schema.sql) ---
+
+export async function guardarTelefonoPendienteHotmart(
+  email: string,
+  telefono: string,
+  producto: string | null
+): Promise<void> {
+  const { error } = await supabase
+    .from("hotmart_pendientes")
+    .upsert({ email: normalizarEmail(email), telefono, producto, recibido_en: new Date().toISOString() });
+  if (error) throw error;
+}
+
+// Lee el teléfono en espera para este correo y lo borra en el mismo paso
+// (una sola vez) — si no hay nada pendiente, null.
+async function tomarTelefonoPendienteHotmart(email: string): Promise<string | null> {
+  const id = normalizarEmail(email);
+  const { data, error } = await supabase
+    .from("hotmart_pendientes")
+    .select("telefono")
+    .eq("email", id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  await supabase.from("hotmart_pendientes").delete().eq("email", id);
+  return data.telefono;
 }
 
 const CURSOR_SYNC_KAJABI = "ultimo_customer_creado_en";

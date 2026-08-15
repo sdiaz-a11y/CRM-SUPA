@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { guardarCursorSyncKajabi, obtenerCursorSyncKajabi, registrarTagKajabi } from "@/lib/db";
+import { guardarCursorSyncKajabi, marcarInvitacionSkoolEnviada, marcarMensajeBienvenidaWa, obtenerCursorSyncKajabi, registrarTagKajabi } from "@/lib/db";
+import { altaEnGhl } from "@/lib/ghl";
 import { KAJABI_OFFER_ID_CLUB_SINERGETICO, KAJABI_TAG_MIEMBRO_DEL_CLUB, nuevosConOfertaDesde } from "@/lib/kajabi";
+import { invitarASkool } from "@/lib/skool";
 
 export const maxDuration = 60;
 
@@ -25,7 +27,29 @@ export async function POST(req: NextRequest) {
 
   const nuevos = await nuevosConOfertaDesde(KAJABI_OFFER_ID_CLUB_SINERGETICO, cursor);
   for (const c of nuevos) {
-    await registrarTagKajabi(c.email, c.nombre, KAJABI_TAG_MIEMBRO_DEL_CLUB);
+    const { cliente, esNuevo } = await registrarTagKajabi(c.email, c.nombre, KAJABI_TAG_MIEMBRO_DEL_CLUB);
+
+    // Compras que Kajabi detecta solo (típicamente vía su integración con
+    // Hotmart) no pasaban por el alta normal del CRM, así que nunca
+    // recibían la invitación de Skool ni el WhatsApp de bienvenida. Un
+    // cliente nuevo aquí merece el mismo trato que uno dado de alta a mano.
+    if (esNuevo) {
+      try {
+        await invitarASkool(cliente.email);
+        await marcarInvitacionSkoolEnviada(cliente.id);
+      } catch {
+        // Best-effort: no bloquea el resto de la sincronización.
+      }
+
+      if (cliente.telefono) {
+        try {
+          await altaEnGhl(cliente.nombre, cliente.email, cliente.telefono);
+          await marcarMensajeBienvenidaWa(cliente.id, "Enviado");
+        } catch {
+          await marcarMensajeBienvenidaWa(cliente.id, "Pendiente");
+        }
+      }
+    }
   }
   if (nuevos.length > 0) {
     await guardarCursorSyncKajabi(nuevos[nuevos.length - 1].creadoEn);

@@ -238,3 +238,16 @@ alter table usuarios enable row level security;
 -- justo al pausar — de ahí se calculan los días restantes al reanudar.
 alter table clientes add column if not exists pausado_en timestamptz;
 alter table clientes add column if not exists fin_acceso_al_pausar timestamptz;
+
+-- Teléfonos de compradores de Hotmart en espera: Kajabi le otorga la oferta
+-- automático (vía su propia integración con Hotmart) sin pasar el teléfono,
+-- y el sincronizador de Kajabi (cada ~15 min) suele crear al cliente
+-- DESPUÉS de que ya llegó el webhook de Hotmart con el teléfono real. Se
+-- guarda aquí hasta que el cliente exista, y ese sincronizador lo recoge.
+create table if not exists hotmart_pendientes (
+  email text primary key,
+  telefono text not null,
+  producto text,
+  recibido_en timestamptz not null default now()
+);
+alter table hotmart_pendientes enable row level security;
