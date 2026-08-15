@@ -6,6 +6,12 @@ import { invitarASkool } from "@/lib/skool";
 
 export const maxDuration = 60;
 
+// Un cliente detectado hace menos de esto se deja para la siguiente corrida
+// en vez de buscarle teléfono de una vez — le da tiempo al webhook de
+// Hotmart (que suele llegar casi al instante, pero no está garantizado) a
+// dejarlo listo en hotmart_pendientes antes de que se le busque.
+const RETRASO_MINIMO_MS = 60_000;
+
 // Reemplaza al webhook nativo de Kajabi (sin permiso disponible para esta
 // cuenta): un llamador externo (cron de GitHub Actions, cada ~15 min) pega
 // aquí y se consulta activamente quién tiene la oferta otorgada desde la
@@ -25,7 +31,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, procesados: 0, nota: "cursor inicial establecido" });
   }
 
-  const nuevos = await nuevosConOfertaDesde(KAJABI_OFFER_ID_CLUB_SINERGETICO, cursor);
+  const ahora = Date.now();
+  const todos = await nuevosConOfertaDesde(KAJABI_OFFER_ID_CLUB_SINERGETICO, cursor);
+  // Vienen del más viejo al más nuevo, así que en cuanto uno es demasiado
+  // reciente, todos los que siguen también lo son — se cortan aquí y quedan
+  // para la próxima corrida (no se pierden: el cursor solo avanza hasta el
+  // último realmente procesado).
+  const primerRetrasadoIdx = todos.findIndex((c) => ahora - new Date(c.creadoEn).getTime() < RETRASO_MINIMO_MS);
+  const nuevos = primerRetrasadoIdx === -1 ? todos : todos.slice(0, primerRetrasadoIdx);
+
   for (const c of nuevos) {
     const { cliente, esNuevo } = await registrarTagKajabi(c.email, c.nombre, KAJABI_TAG_MIEMBRO_DEL_CLUB);
 
