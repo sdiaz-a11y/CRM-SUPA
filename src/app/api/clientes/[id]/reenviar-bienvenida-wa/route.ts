@@ -27,10 +27,10 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     aviso = err instanceof Error ? err.message : "No se pudo enviar el mensaje de bienvenida por WhatsApp";
   }
 
-  const actualizado = await marcarMensajeBienvenidaWa(
-    clienteId,
-    aviso ? "Pendiente" : "Enviado",
-    permiso.usuario.nombre
-  );
+  // Siempre queda en "Pendiente" aquí, incluso si el alta en GHL salió bien
+  // — eso solo confirma que se pidió el envío, no que WhatsApp lo entregó.
+  // El panel del cliente espera la confirmación real del webhook
+  // (/api/webhooks/ghl-bienvenida-wa) antes de mostrar "Enviado".
+  const actualizado = await marcarMensajeBienvenidaWa(clienteId, "Pendiente", permiso.usuario.nombre);
   return NextResponse.json({ cliente: actualizado, aviso });
 }

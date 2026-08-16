@@ -56,12 +56,15 @@ export async function POST(req: NextRequest) {
       }
 
       if (cliente.telefono) {
+        // "Enviado" nunca se escribe aquí — solo el webhook de confirmación
+        // real (/api/webhooks/ghl-bienvenida-wa) lo hace, cuando GHL avisa
+        // que WhatsApp de verdad lo entregó.
         try {
           await altaEnGhl(cliente.nombre, cliente.email, cliente.telefono);
-          await marcarMensajeBienvenidaWa(cliente.id, "Enviado");
         } catch {
-          await marcarMensajeBienvenidaWa(cliente.id, "Pendiente");
+          // Best-effort: no bloquea el resto de la sincronización.
         }
+        await marcarMensajeBienvenidaWa(cliente.id, "Pendiente");
       }
     }
   }

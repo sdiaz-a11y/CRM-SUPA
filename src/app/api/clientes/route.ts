@@ -111,9 +111,13 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       avisoGhl = err instanceof Error ? err.message : "No se pudo dar de alta en GoHighLevel";
     }
-    // Sin teléfono no hay a dónde mandar el WhatsApp, aunque el alta en GHL
-    // en sí haya salido bien — se marca Pendiente en vez de Enviado.
-    cliente = await marcarMensajeBienvenidaWa(cliente.id, avisoGhl || !cliente.telefono ? "Pendiente" : "Enviado");
+    // "Enviado" nunca se escribe aquí, ni siquiera si el alta en GHL salió
+    // bien — eso solo confirma que se pidió el envío, no que WhatsApp lo
+    // entregó. La única fuente de verdad es el webhook de confirmación real
+    // (/api/webhooks/ghl-bienvenida-wa), que corrige esto más tarde.
+    if (cliente.telefono) {
+      cliente = await marcarMensajeBienvenidaWa(cliente.id, "Pendiente");
+    }
 
     return NextResponse.json({ cliente, avisoKajabi, avisoSkool, avisoGhl });
   } catch (err) {

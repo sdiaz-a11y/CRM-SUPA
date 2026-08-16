@@ -1,6 +1,7 @@
 import { supabase } from "./supabase";
 import { calcularVencimientoSkool, formatearFechaSkool, parsearFechaSkool } from "./fechas";
 import { cargarInventarioBoletos, cargarPaisPorEvento, calcularAccesos, regionDeCliente } from "./boletos";
+import { obtenerPerfilKajabi } from "./kajabi";
 import { filaACliente, fechaSkoolADateOnly, type ClienteRow } from "./supabase-map";
 import type { Accesos, Cliente, EstadoMensajeBienvenidaWa, EventoTimeline, TipoEvento, Variante } from "./types";
 
@@ -845,18 +846,29 @@ export async function registrarTagKajabi(
   } else {
     esNuevo = true;
     const region = await regionParaCrearOEditar(null, null);
+    // Prioridad del teléfono: primero lo que haya dejado en espera el
+    // webhook de Hotmart (dato real de compra, más reciente), y si no,
+    // el que ya tenga capturado en su perfil de Kajabi — así este alta
+    // automática arranca con teléfono igual que una manual, sin esperar a
+    // que alguien lo escriba a mano.
     const telefonoPendiente = await tomarTelefonoPendienteHotmart(id);
+    const telefono = telefonoPendiente ?? (await obtenerPerfilKajabi(id).catch(() => null))?.telefono ?? null;
     const { data, error } = await supabase
       .from("clientes")
       .insert({
         id,
         nombre: nombre?.trim() || id,
         email: id,
-        telefono: telefonoPendiente,
+        telefono,
         fecha_inscripcion: new Date().toISOString(),
         fin_acceso: finDeAccesoDentroDeUnAnio(),
         orden_csv: Date.now(),
         region,
+        // Llegar aquí (alta automática vía tag de Kajabi) significa que
+        // Kajabi ya confirmó el acceso — el indicador de la lista debe
+        // reflejarlo desde el minuto uno, no quedarse en "sin acceso" solo
+        // porque el alta no pasó por el formulario del CRM.
+        acceso_plataforma: "Si",
       })
       .select("*")
       .single();

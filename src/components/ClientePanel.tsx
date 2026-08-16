@@ -1706,17 +1706,23 @@ function SelectorEstadoWa({
       </p>
     );
   }
+  // Sin valor guardado (nunca se intentó, o llegó por un camino que todavía
+  // no toca este campo) se lee como "Pendiente" — nunca como "Enviado". Ojo
+  // con el <select> de abajo: si `value` no coincide con ninguna <option>,
+  // el navegador muestra la primera opción de la lista igual, sin que eso
+  // signifique que ese es el valor real — por eso se normaliza aquí antes.
+  const valorMostrado = valor || "Pendiente";
   if (soloLectura) {
-    return <p className="text-foreground">{valor || <span className="text-muted">—</span>}</p>;
+    return <p className="text-foreground">{valorMostrado}</p>;
   }
-  const esConocido = !!valor && (ESTADOS_MENSAJE_BIENVENIDA_WA as readonly string[]).includes(valor);
+  const esConocido = (ESTADOS_MENSAJE_BIENVENIDA_WA as readonly string[]).includes(valorMostrado);
   return (
     <select
-      value={valor ?? ""}
+      value={valorMostrado}
       onChange={(e) => onChange(e.target.value)}
       className="mt-1 w-full rounded-lg border border-silver bg-surface-2 px-2 py-1 text-sm text-foreground outline-none ring-primary/30 focus:ring-2"
     >
-      {valor && !esConocido && <option value={valor}>{valor} (anterior)</option>}
+      {!esConocido && <option value={valorMostrado}>{valorMostrado} (anterior)</option>}
       {ESTADOS_MENSAJE_BIENVENIDA_WA.map((op) => (
         <option key={op} value={op}>
           {op}
