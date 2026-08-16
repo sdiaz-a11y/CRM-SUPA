@@ -833,6 +833,10 @@ export function ClientePanel({
                       <AccesoBadge icon={Crown} label="VIP" detalle={cliente.accesos.vip} tono="warning" />
                       <AccesoBadge icon={Gem} label="Black" detalle={cliente.accesos.black} tono="black" />
                     </div>
+                    <dl className="mt-3.5 grid grid-cols-2 gap-3 border-t border-silver/60 pt-3.5 text-sm">
+                      <CampoValor label="Membresía Skool" valor={cliente.tipoMembresia} />
+                      <CampoValor label="Vence Skool" valor={cliente.vencimientoSkool} />
+                    </dl>
                     <button
                       onClick={() => setTab("accesos")}
                       className="ease-spring mt-2.5 text-xs font-medium text-primary transition hover:text-primary-deep"

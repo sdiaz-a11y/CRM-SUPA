@@ -314,7 +314,28 @@ export default function ClientesPage() {
           ) : (
             <>
               <div className="flex-1 overflow-auto">
-                <table className="w-full min-w-[1100px] table-fixed text-sm">
+                {/* Celular: tarjeta de 2 líneas (nombre + correo) más los
+                    indicadores de estado — el resto de los datos (teléfono,
+                    evento, membresía) solo se ve al entrar al perfil. */}
+                <ul className="divide-y divide-silver/60 md:hidden">
+                  {clientes.map((c) => (
+                    <li key={c.id}>
+                      <button
+                        onClick={() => setSeleccionado(c.id)}
+                        aria-label={`Ver perfil de ${c.nombre}`}
+                        className="ease-spring flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-surface-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-foreground">{c.nombre}</p>
+                          <p className="truncate text-xs text-muted">{c.email}</p>
+                        </div>
+                        <EstadoOnboarding cliente={c} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+
+                <table className="hidden w-full min-w-[1100px] table-fixed text-sm md:table">
                   <colgroup>
                     <col className="w-[18%]" />
                     <col className="w-[23%]" />
