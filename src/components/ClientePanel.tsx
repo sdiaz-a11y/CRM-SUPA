@@ -69,7 +69,6 @@ type Form = {
   tipoMembresia: string;
   vencimientoSkool: string;
   invitacionSkool: string;
-  contactoWhats: string;
   llamada: string;
   notasSoporte: string;
   finAcceso: string;
@@ -92,7 +91,6 @@ function formDeCliente(c: Cliente | null): Form {
     tipoMembresia: c?.tipoMembresia ?? "",
     vencimientoSkool: c?.vencimientoSkool ?? "",
     invitacionSkool: c?.invitacionSkool ?? "",
-    contactoWhats: c?.contactoWhats ?? "",
     llamada: c?.llamada ?? "",
     notasSoporte: c?.notasSoporte ?? "",
     finAcceso: isoAFechaInput(c?.finAcceso ?? null),
@@ -513,13 +511,35 @@ export function ClientePanel({
     setPasoEnviarWa(0);
     if (!res.ok) {
       setError(data.error ?? "No se pudo reenviar el mensaje de bienvenida");
+      window.alert(`No se pudo enviar el mensaje de bienvenida por WhatsApp: ${data.error ?? "error desconocido"}`);
       return;
     }
     if (data.aviso) {
       setError(`No se pudo reenviar por WhatsApp — quedó en Pendiente: ${data.aviso}`);
+      window.alert(`No se pudo enviar el mensaje de bienvenida por WhatsApp — quedó en Pendiente:\n\n${data.aviso}`);
     }
     setCliente(data.cliente);
-    setForm((f) => ({ ...f, contactoWhats: data.cliente.contactoWhats ?? "" }));
+    onClienteActualizado(data.cliente);
+    const eventosRes = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/eventos`).then((r) =>
+      r.json()
+    );
+    setEventos(eventosRes.eventos ?? []);
+  }
+
+  async function cambiarEstadoWa(nuevoEstado: string) {
+    if (!cliente || !puedeEditar || nuevoEstado === cliente.contactoWhats) return;
+    setError(null);
+    const res = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tipo: "mensaje-bienvenida-wa", estado: nuevoEstado }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error ?? "No se pudo actualizar el estado del mensaje de bienvenida");
+      return;
+    }
+    setCliente(data.cliente);
     onClienteActualizado(data.cliente);
     const eventosRes = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/eventos`).then((r) =>
       r.json()
@@ -748,9 +768,11 @@ export function ClientePanel({
                               </button>
                             )}
                           </div>
-                          <p className="text-foreground">
-                            {cliente.contactoWhats || <span className="text-muted">—</span>}
-                          </p>
+                          <SelectorEstadoWa
+                            valor={cliente.contactoWhats}
+                            onChange={cambiarEstadoWa}
+                            soloLectura={!puedeEditar}
+                          />
                           {pasoEnviarWa === 1 && (
                             <div className="mt-2 rounded-lg border border-primary/30 bg-primary-dim/40 p-3">
                               <p className="mb-2.5 text-xs text-foreground">
@@ -1169,24 +1191,28 @@ export function ClientePanel({
                         label="Invitación de Skool"
                         valor={cliente.invitacionSkool}
                       />
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="flex items-start gap-2 text-foreground">
-                          <MessageCircle className="mt-0.5 h-3.5 w-3.5 flex-none text-muted" strokeWidth={1.75} />
-                          <span>
-                            <span className="text-muted">Mensaje de Bienvenida WA: </span>
-                            {cliente.contactoWhats || <span className="text-muted">—</span>}
+                      <div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="flex items-center gap-2 text-muted">
+                            <MessageCircle className="h-3.5 w-3.5 flex-none" strokeWidth={1.75} />
+                            Mensaje de Bienvenida WA
                           </span>
-                        </span>
-                        {puedeEditar && (
-                          <button
-                            onClick={confirmarEnviarWa}
-                            disabled={!cliente.telefono || enviandoWa}
-                            title={!cliente.telefono ? "El cliente no tiene teléfono registrado" : "Reenviar mensaje de bienvenida"}
-                            className="ease-spring flex-none rounded-lg border border-silver px-2.5 py-1 text-xs font-medium text-foreground transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            Enviar
-                          </button>
-                        )}
+                          {puedeEditar && (
+                            <button
+                              onClick={confirmarEnviarWa}
+                              disabled={!cliente.telefono || enviandoWa}
+                              title={!cliente.telefono ? "El cliente no tiene teléfono registrado" : "Reenviar mensaje de bienvenida"}
+                              className="ease-spring flex-none rounded-lg border border-silver px-2.5 py-1 text-xs font-medium text-foreground transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              Enviar
+                            </button>
+                          )}
+                        </div>
+                        <SelectorEstadoWa
+                          valor={cliente.contactoWhats}
+                          onChange={cambiarEstadoWa}
+                          soloLectura={!puedeEditar}
+                        />
                       </div>
                       {pasoEnviarWa === 1 && (
                         <div className="rounded-lg border border-primary/30 bg-primary-dim/40 p-3">
@@ -1245,29 +1271,9 @@ export function ClientePanel({
                           onChange={(v) => setForm((f) => ({ ...f, invitacionSkool: v }))}
                         />
                       </Campo>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Campo label="Mensaje de Bienvenida WA">
-                          <select
-                            value={form.contactoWhats}
-                            onChange={(e) => setForm((f) => ({ ...f, contactoWhats: e.target.value }))}
-                            className="w-full rounded-lg border border-silver bg-surface-2 px-3 py-1.5 text-sm text-foreground outline-none ring-primary/30 focus:ring-2"
-                          >
-                            {form.contactoWhats &&
-                              !(ESTADOS_MENSAJE_BIENVENIDA_WA as readonly string[]).includes(form.contactoWhats) && (
-                                <option value={form.contactoWhats}>{form.contactoWhats} (anterior)</option>
-                              )}
-                            <option value="">— Sin definir —</option>
-                            {ESTADOS_MENSAJE_BIENVENIDA_WA.map((op) => (
-                              <option key={op} value={op}>
-                                {op}
-                              </option>
-                            ))}
-                          </select>
-                        </Campo>
-                        <Campo label="Llamada">
-                          <Input value={form.llamada} onChange={(v) => setForm((f) => ({ ...f, llamada: v }))} />
-                        </Campo>
-                      </div>
+                      <Campo label="Llamada">
+                        <Input value={form.llamada} onChange={(v) => setForm((f) => ({ ...f, llamada: v }))} />
+                      </Campo>
                     </div>
                   )}
                 </Tarjeta>
@@ -1578,6 +1584,38 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
       <span className="mb-1 block text-xs font-medium text-muted">{label}</span>
       {children}
     </label>
+  );
+}
+
+// Desplegable de "Mensaje de Bienvenida WA" — siempre editable al instante
+// (guarda en cuanto cambia), no depende del modo "Editar" general del
+// panel, igual que el botón "Enviar" que vive al lado.
+function SelectorEstadoWa({
+  valor,
+  onChange,
+  soloLectura,
+}: {
+  valor: string | null;
+  onChange: (v: string) => void;
+  soloLectura?: boolean;
+}) {
+  if (soloLectura) {
+    return <p className="text-foreground">{valor || <span className="text-muted">—</span>}</p>;
+  }
+  const esConocido = !!valor && (ESTADOS_MENSAJE_BIENVENIDA_WA as readonly string[]).includes(valor);
+  return (
+    <select
+      value={valor ?? ""}
+      onChange={(e) => onChange(e.target.value)}
+      className="mt-1 w-full rounded-lg border border-silver bg-surface-2 px-2 py-1 text-sm text-foreground outline-none ring-primary/30 focus:ring-2"
+    >
+      {valor && !esConocido && <option value={valor}>{valor} (anterior)</option>}
+      {ESTADOS_MENSAJE_BIENVENIDA_WA.map((op) => (
+        <option key={op} value={op}>
+          {op}
+        </option>
+      ))}
+    </select>
   );
 }
 

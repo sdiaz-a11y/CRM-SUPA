@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requerirPermiso } from "@/lib/auth";
-import { actualizarAccesos, actualizarDatosCliente, actualizarTags, obtenerCliente } from "@/lib/db";
+import {
+  actualizarAccesos,
+  actualizarDatosCliente,
+  actualizarTags,
+  establecerMensajeBienvenidaWa,
+  obtenerCliente,
+} from "@/lib/db";
+import { ESTADOS_MENSAJE_BIENVENIDA_WA } from "@/lib/types";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const permiso = await requerirPermiso("verClientes");
@@ -45,7 +52,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           tipoMembresia: body.tipoMembresia,
           vencimientoSkool: body.vencimientoSkool,
           invitacionSkool: body.invitacionSkool,
-          contactoWhats: body.contactoWhats,
           llamada: body.llamada,
           notasSoporte: body.notasSoporte,
           finAcceso: body.finAcceso,
@@ -57,6 +63,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     if (body.tipo === "tags") {
       const cliente = await actualizarTags(clienteId, body.tags ?? [], autor);
+      return NextResponse.json({ cliente });
+    }
+
+    if (body.tipo === "mensaje-bienvenida-wa") {
+      if (!(ESTADOS_MENSAJE_BIENVENIDA_WA as readonly string[]).includes(body.estado)) {
+        return NextResponse.json({ error: "Estado inválido" }, { status: 400 });
+      }
+      const cliente = await establecerMensajeBienvenidaWa(clienteId, body.estado, autor);
       return NextResponse.json({ cliente });
     }
 

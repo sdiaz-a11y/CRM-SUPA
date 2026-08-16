@@ -342,6 +342,38 @@ export async function marcarMensajeBienvenidaWa(
   return filaACliente(data as ClienteRow);
 }
 
+// Selección manual desde el desplegable del panel del cliente — a
+// diferencia de marcarMensajeBienvenidaWa(), esta sí permite "Número
+// Inválido" porque siempre viene de una persona autenticada eligiéndolo a
+// propósito, nunca de una automatización.
+export async function establecerMensajeBienvenidaWa(
+  id: string,
+  estado: EstadoMensajeBienvenidaWa,
+  autor: string
+): Promise<Cliente> {
+  const { data: fila, error: errLectura } = await supabase
+    .from("clientes")
+    .select("contacto_whats")
+    .eq("id", id)
+    .maybeSingle();
+  if (errLectura) throw errLectura;
+  if (!fila) throw new Error("Cliente no encontrado");
+  const anterior = fila.contacto_whats ?? "—";
+
+  const { data, error } = await supabase
+    .from("clientes")
+    .update({ contacto_whats: estado, actualizado_en: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+
+  if (anterior !== estado) {
+    await registrarEvento(id, "EDICION", `Mensaje de Bienvenida WA: "${anterior}" → "${estado}"`, autor);
+  }
+  return filaACliente(data as ClienteRow);
+}
+
 // Completa el teléfono cuando llegó después del alta (típicamente el
 // webhook de Hotmart, que trae el dato que Kajabi no pasa). Solo se usa
 // cuando el cliente todavía no tenía teléfono — no pisa uno ya capturado.
@@ -558,7 +590,6 @@ const CAMPOS_EDITABLES: { key: keyof CambiosDatosCliente; columna: string; label
   { key: "tipoMembresia", columna: "tipo_membresia", label: "Tipo de membresía" },
   { key: "vencimientoSkool", columna: "vencimiento_skool", label: "Vencimiento Skool" },
   { key: "invitacionSkool", columna: "invitacion_skool", label: "Invitación de Skool" },
-  { key: "contactoWhats", columna: "contacto_whats", label: "Mensaje de Bienvenida WA" },
   { key: "llamada", columna: "llamada", label: "Llamada" },
   { key: "notasSoporte", columna: "notas_soporte", label: "Notas de soporte técnico" },
 ];
@@ -574,7 +605,6 @@ type CambiosDatosCliente = {
   tipoMembresia?: string | null;
   vencimientoSkool?: string | null;
   invitacionSkool?: string | null;
-  contactoWhats?: string | null;
   llamada?: string | null;
   notasSoporte?: string | null;
   // "YYYY-MM-DD" (input type=date) o null/vacío para limpiarla.
@@ -606,7 +636,6 @@ export async function actualizarDatosCliente(
     tipoMembresia: cambios.tipoMembresia?.trim() || "—",
     vencimientoSkool: cambios.vencimientoSkool?.trim() || "—",
     invitacionSkool: cambios.invitacionSkool?.trim() || "—",
-    contactoWhats: cambios.contactoWhats?.trim() || "—",
     llamada: cambios.llamada?.trim() || "—",
     notasSoporte: cambios.notasSoporte?.trim() || "—",
   };
@@ -667,7 +696,6 @@ export async function actualizarDatosCliente(
       vencimiento_skool: vencimientoSkoolTexto,
       vencimiento_skool_fecha: vencimientoSkoolFecha,
       invitacion_skool: cambios.invitacionSkool?.trim() || null,
-      contacto_whats: cambios.contactoWhats?.trim() || null,
       llamada: cambios.llamada?.trim() || null,
       notas_soporte: cambios.notasSoporte?.trim() || null,
       fin_acceso: finAccesoNuevo,
