@@ -568,7 +568,7 @@ export function ClientePanel({
   async function esperarConfirmacionWa(clienteId: string, idsEventosAntes: Set<string>): Promise<void> {
     setEsperandoConfirmacionWa(true);
     const INTERVALO_MS = 3000;
-    const MAX_INTENTOS = 15; // ~45s — el Workflow real ha tardado entre 13 y 28s en probarse
+    const MAX_INTENTOS = 30; // ~90s — el Workflow real ha tardado entre 13 y 46s en probarse, con margen
 
     for (let intento = 0; intento < MAX_INTENTOS; intento++) {
       await new Promise((resolve) => setTimeout(resolve, INTERVALO_MS));
