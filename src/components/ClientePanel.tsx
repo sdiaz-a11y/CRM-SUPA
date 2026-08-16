@@ -164,6 +164,8 @@ export function ClientePanel({
   const [eliminando, setEliminando] = useState(false);
   const [pasoEnviarWa, setPasoEnviarWa] = useState<0 | 1>(0);
   const [enviandoWa, setEnviandoWa] = useState(false);
+  const [esperandoConfirmacionWa, setEsperandoConfirmacionWa] = useState(false);
+  const [puntosEnviando, setPuntosEnviando] = useState(0);
   const [pasoPausar, setPasoPausar] = useState<0 | 1>(0);
   const [pausando, setPausando] = useState(false);
   const [pasoReanudar, setPasoReanudar] = useState<0 | 1>(0);
@@ -173,12 +175,27 @@ export function ClientePanel({
   const [errorPerfilKajabi, setErrorPerfilKajabi] = useState<string | null>(null);
   const [intentadoPerfilKajabi, setIntentadoPerfilKajabi] = useState(false);
 
+  const mostrandoEnviandoWa = enviandoWa || esperandoConfirmacionWa;
+  useEffect(() => {
+    if (!mostrandoEnviandoWa) {
+      setPuntosEnviando(0);
+      return;
+    }
+    const intervalo = setInterval(() => setPuntosEnviando((p) => (p + 1) % 4), 400);
+    return () => clearInterval(intervalo);
+  }, [mostrandoEnviandoWa]);
+
   useEffect(() => {
     fetch("/api/biblioteca?tipo=tag")
       .then((r) => r.json())
       .then((data) => setTagsCatalogo(data.opciones ?? []))
       .catch(() => setTagsCatalogo([]));
   }, []);
+
+  const clienteIdRef = useRef(clienteId);
+  useEffect(() => {
+    clienteIdRef.current = clienteId;
+  }, [clienteId]);
 
   useEffect(() => {
     let cancelado = false;
@@ -189,6 +206,8 @@ export function ClientePanel({
     setPasoEliminar(0);
     setPasoPausar(0);
     setPasoReanudar(0);
+    setPasoEnviarWa(0);
+    setEsperandoConfirmacionWa(false);
     setPerfilKajabi(null);
     setErrorPerfilKajabi(null);
     setIntentadoPerfilKajabi(false);
@@ -501,29 +520,100 @@ export function ClientePanel({
       setPasoEnviarWa(1);
       return;
     }
+    const clienteId = cliente.id;
+    // IDs de los eventos que ya existían antes de mandar — así, al hacer
+    // polling después, se detecta el evento nuevo de confirmación de GHL sin
+    // depender de comparar fechas (evita problemas de reloj desincronizado
+    // entre el navegador y el servidor).
+    const idsEventosAntes = new Set(eventos.map((e) => e.id));
+
     setEnviandoWa(true);
     setError(null);
-    const res = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/reenviar-bienvenida-wa`, {
+    setPasoEnviarWa(0);
+    const res = await fetch(`/api/clientes/${encodeURIComponent(clienteId)}/reenviar-bienvenida-wa`, {
       method: "POST",
     });
     const data = await res.json();
     setEnviandoWa(false);
-    setPasoEnviarWa(0);
     if (!res.ok) {
       setError(data.error ?? "No se pudo reenviar el mensaje de bienvenida");
       window.alert(`No se pudo enviar el mensaje de bienvenida por WhatsApp: ${data.error ?? "error desconocido"}`);
       return;
     }
     if (data.aviso) {
+      // El alta en GHL falló de entrada (ni siquiera llegó a intentar
+      // mandarlo) — no hay Workflow corriendo del cual esperar confirmación.
       setError(`No se pudo reenviar por WhatsApp — quedó en Pendiente: ${data.aviso}`);
-      window.alert(`No se pudo enviar el mensaje de bienvenida por WhatsApp — quedó en Pendiente:\n\n${data.aviso}`);
+      window.alert(
+        `No se envió el mensaje de bienvenida por WhatsApp: ${data.aviso}\n\nRevisa el número del cliente, o puedes intentar enviarlo manual.`
+      );
+      setCliente(data.cliente);
+      onClienteActualizado(data.cliente);
+      return;
     }
-    setCliente(data.cliente);
-    onClienteActualizado(data.cliente);
-    const eventosRes = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/eventos`).then((r) =>
-      r.json()
-    );
-    setEventos(eventosRes.eventos ?? []);
+    // A propósito NO se actualiza cliente.contactoWhats todavía con el valor
+    // optimista del servidor — mientras se espera la confirmación real de
+    // GHL, la UI muestra "Enviando…" en vez de un "Enviado" que podría
+    // desdecirse unos segundos después.
+    esperarConfirmacionWa(clienteId, idsEventosAntes);
+  }
+
+  // Hace polling de la timeline hasta encontrar el evento que registra el
+  // webhook de confirmación real de GHL (ver /api/webhooks/ghl-bienvenida-wa),
+  // en vez de asumir "Enviado" apenas se logra agregar el tag en GHL. Cada
+  // corrida corre en su propio cierre (clienteId capturado al llamar) para
+  // no pisar el perfil de otro cliente si el usuario cambia de panel a media
+  // espera — por eso siempre compara contra clienteIdRef antes de aplicar
+  // el resultado.
+  async function esperarConfirmacionWa(clienteId: string, idsEventosAntes: Set<string>): Promise<void> {
+    setEsperandoConfirmacionWa(true);
+    const INTERVALO_MS = 3000;
+    const MAX_INTENTOS = 15; // ~45s — el Workflow real ha tardado entre 13 y 28s en probarse
+
+    for (let intento = 0; intento < MAX_INTENTOS; intento++) {
+      await new Promise((resolve) => setTimeout(resolve, INTERVALO_MS));
+      if (clienteIdRef.current !== clienteId) return; // cambiaron de cliente, se aborta
+
+      const eventosRes = await fetch(`/api/clientes/${encodeURIComponent(clienteId)}/eventos`)
+        .then((r) => r.json())
+        .catch(() => null);
+      const eventosNuevos: EventoTimeline[] = eventosRes?.eventos ?? [];
+      const confirmacion = eventosNuevos.find((e) => e.autor === "GHL" && !idsEventosAntes.has(e.id));
+      if (!confirmacion) continue;
+
+      if (clienteIdRef.current !== clienteId) return;
+      const clienteRes = await fetch(`/api/clientes/${encodeURIComponent(clienteId)}`)
+        .then((r) => r.json())
+        .catch(() => null);
+      if (clienteIdRef.current !== clienteId) return;
+
+      setEsperandoConfirmacionWa(false);
+      setEventos(eventosNuevos);
+      if (clienteRes?.cliente) {
+        setCliente(clienteRes.cliente);
+        onClienteActualizado(clienteRes.cliente);
+      }
+      if (confirmacion.detalle.includes("no se pudo entregar")) {
+        window.alert(
+          "No se envió el mensaje de bienvenida por WhatsApp.\n\nRevisa el número del cliente, o puedes intentar enviarlo manual."
+        );
+      }
+      return;
+    }
+
+    // Se acabó el tiempo de espera sin noticias de GHL — no se asume nada,
+    // solo se refresca con lo último que haya en la base y se avisa.
+    if (clienteIdRef.current !== clienteId) return;
+    setEsperandoConfirmacionWa(false);
+    const clienteRes = await fetch(`/api/clientes/${encodeURIComponent(clienteId)}`)
+      .then((r) => r.json())
+      .catch(() => null);
+    if (clienteIdRef.current !== clienteId) return;
+    if (clienteRes?.cliente) {
+      setCliente(clienteRes.cliente);
+      onClienteActualizado(clienteRes.cliente);
+    }
+    setError("No se pudo confirmar a tiempo si el WhatsApp se envió — revisa el estado en unos minutos.");
   }
 
   async function cambiarEstadoWa(nuevoEstado: string) {
@@ -760,7 +850,7 @@ export function ClientePanel({
                             {puedeEditar && (
                               <button
                                 onClick={confirmarEnviarWa}
-                                disabled={!cliente.telefono || enviandoWa}
+                                disabled={!cliente.telefono || mostrandoEnviandoWa}
                                 title={!cliente.telefono ? "El cliente no tiene teléfono registrado" : "Reenviar mensaje de bienvenida"}
                                 className="ease-spring flex-none rounded-lg border border-silver px-2.5 py-1 text-xs font-medium text-foreground transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40"
                               >
@@ -772,6 +862,8 @@ export function ClientePanel({
                             valor={cliente.contactoWhats}
                             onChange={cambiarEstadoWa}
                             soloLectura={!puedeEditar}
+                            enviando={mostrandoEnviandoWa}
+                            puntos={puntosEnviando}
                           />
                           {pasoEnviarWa === 1 && (
                             <div className="mt-2 rounded-lg border border-primary/30 bg-primary-dim/40 p-3">
@@ -1200,7 +1292,7 @@ export function ClientePanel({
                           {puedeEditar && (
                             <button
                               onClick={confirmarEnviarWa}
-                              disabled={!cliente.telefono || enviandoWa}
+                              disabled={!cliente.telefono || mostrandoEnviandoWa}
                               title={!cliente.telefono ? "El cliente no tiene teléfono registrado" : "Reenviar mensaje de bienvenida"}
                               className="ease-spring flex-none rounded-lg border border-silver px-2.5 py-1 text-xs font-medium text-foreground transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40"
                             >
@@ -1212,6 +1304,8 @@ export function ClientePanel({
                           valor={cliente.contactoWhats}
                           onChange={cambiarEstadoWa}
                           soloLectura={!puedeEditar}
+                          enviando={mostrandoEnviandoWa}
+                          puntos={puntosEnviando}
                         />
                       </div>
                       {pasoEnviarWa === 1 && (
@@ -1594,11 +1688,24 @@ function SelectorEstadoWa({
   valor,
   onChange,
   soloLectura,
+  enviando,
+  puntos,
 }: {
   valor: string | null;
   onChange: (v: string) => void;
   soloLectura?: boolean;
+  // Mientras se espera la confirmación real de GHL, se muestra "Enviando…"
+  // animado en vez del valor guardado — que podría desdecirse en segundos.
+  enviando?: boolean;
+  puntos?: number;
 }) {
+  if (enviando) {
+    return (
+      <p className="text-foreground">
+        Enviando<span className="inline-block w-[1.5em] text-left">{".".repeat(puntos ?? 0)}</span>
+      </p>
+    );
+  }
   if (soloLectura) {
     return <p className="text-foreground">{valor || <span className="text-muted">—</span>}</p>;
   }

@@ -320,8 +320,8 @@ export default function ClientesPage() {
                     <col className="w-[23%]" />
                     <col className="w-[13%]" />
                     <col className="w-[16%]" />
-                    <col className="w-[16%]" />
                     <col className="w-[14%]" />
+                    <col className="w-[16%]" />
                   </colgroup>
                   <thead className="sticky top-0 z-10 bg-surface">
                     <tr className="border-b border-silver text-left text-xs font-semibold uppercase tracking-wide text-muted">
@@ -329,8 +329,8 @@ export default function ClientesPage() {
                       <th className="whitespace-nowrap px-5 py-3">Correo</th>
                       <th className="whitespace-nowrap px-5 py-3">Teléfono</th>
                       <th className="whitespace-nowrap px-5 py-3">Evento</th>
-                      <th className="whitespace-nowrap px-5 py-3">Estado</th>
                       <th className="whitespace-nowrap px-5 py-3">Membresía</th>
+                      <th className="whitespace-nowrap px-5 py-3">Estado</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -354,10 +354,10 @@ export default function ClientesPage() {
                         <td className="truncate px-5 py-2.5 text-muted" title={c.evento ?? undefined}>
                           {c.evento || "—"}
                         </td>
+                        <td className="truncate px-5 py-2.5 text-muted">{c.tipoMembresia || "—"}</td>
                         <td className="px-5 py-2.5">
                           <EstadoOnboarding cliente={c} />
                         </td>
-                        <td className="truncate px-5 py-2.5 text-muted">{c.tipoMembresia || "—"}</td>
                       </tr>
                     ))}
                   </tbody>
