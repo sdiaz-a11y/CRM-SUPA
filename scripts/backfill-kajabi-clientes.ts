@@ -8,9 +8,14 @@
 //      llegaron por esta vía es porque Kajabi ya les había otorgado la oferta).
 //   3. Si no tienen teléfono, intenta traerlo del perfil real de Kajabi —
 //      nunca pisa un teléfono que ya esté capturado.
+//   4. Si tienen teléfono pero sin el "+" de formato E.164 (el alta
+//      automática en registrarTagKajabi no lo normalizaba — bug corregido
+//      en src/lib/db.ts), se lo agrega. No inventa lada/código de país: solo
+//      antepone "+" al valor que ya estaba guardado.
 //
 // Uso: npm run backfill-kajabi-clientes
 import "./_env";
+import { normalizarTelefono } from "../src/lib/db";
 import { obtenerPerfilKajabi } from "../src/lib/kajabi";
 import { supabase } from "../src/lib/supabase";
 
@@ -34,6 +39,7 @@ async function main() {
   let accesoCorregido = 0;
   let telefonoEncontrado = 0;
   let telefonoNoEncontrado = 0;
+  let telefonoNormalizado = 0;
   let errores = 0;
 
   for (const c of clientes ?? []) {
@@ -48,7 +54,7 @@ async function main() {
       try {
         const perfil = await obtenerPerfilKajabi(c.id);
         if (perfil.telefono) {
-          cambios.telefono = perfil.telefono;
+          cambios.telefono = normalizarTelefono(perfil.telefono) ?? perfil.telefono;
           telefonoEncontrado++;
         } else {
           telefonoNoEncontrado++;
@@ -61,6 +67,9 @@ async function main() {
       // clientes (como el backfill inicial de 158) empieza a toparse con
       // rate-limiting de la API de Kajabi a la mitad.
       await new Promise((resolve) => setTimeout(resolve, 400));
+    } else if (!c.telefono.startsWith("+")) {
+      cambios.telefono = normalizarTelefono(c.telefono) ?? c.telefono;
+      telefonoNormalizado++;
     }
 
     if (Object.keys(cambios).length > 0) {
@@ -79,6 +88,7 @@ async function main() {
   console.log(`Acceso a plataforma corregido a "Si": ${accesoCorregido}`);
   console.log(`Teléfono encontrado y guardado: ${telefonoEncontrado}`);
   console.log(`Teléfono no encontrado en Kajabi: ${telefonoNoEncontrado}`);
+  console.log(`Teléfono normalizado a formato "+...": ${telefonoNormalizado}`);
   console.log(`Errores: ${errores}`);
 }
 

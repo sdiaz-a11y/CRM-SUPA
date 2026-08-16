@@ -40,37 +40,54 @@ export async function POST(req: NextRequest) {
   const primerRetrasadoIdx = todos.findIndex((c) => ahora - new Date(c.creadoEn).getTime() < RETRASO_MINIMO_MS);
   const nuevos = primerRetrasadoIdx === -1 ? todos : todos.slice(0, primerRetrasadoIdx);
 
+  let procesados = 0;
+  let ultimoProcesado: string | null = null;
   for (const c of nuevos) {
-    const { cliente, esNuevo } = await registrarTagKajabi(c.email, c.nombre, KAJABI_TAG_MIEMBRO_DEL_CLUB);
+    try {
+      const { cliente, esNuevo } = await registrarTagKajabi(c.email, c.nombre, KAJABI_TAG_MIEMBRO_DEL_CLUB);
 
-    // Compras que Kajabi detecta solo (típicamente vía su integración con
-    // Hotmart) no pasaban por el alta normal del CRM, así que nunca
-    // recibían la invitación de Skool ni el WhatsApp de bienvenida. Un
-    // cliente nuevo aquí merece el mismo trato que uno dado de alta a mano.
-    if (esNuevo) {
-      try {
-        await invitarASkool(cliente.email);
-        await marcarInvitacionSkoolEnviada(cliente.id);
-      } catch {
-        // Best-effort: no bloquea el resto de la sincronización.
-      }
-
-      if (cliente.telefono) {
-        // "Enviado" nunca se escribe aquí — solo el webhook de confirmación
-        // real (/api/webhooks/ghl-bienvenida-wa) lo hace, cuando GHL avisa
-        // que WhatsApp de verdad lo entregó.
+      // Compras que Kajabi detecta solo (típicamente vía su integración con
+      // Hotmart) no pasaban por el alta normal del CRM, así que nunca
+      // recibían la invitación de Skool ni el WhatsApp de bienvenida. Un
+      // cliente nuevo aquí merece el mismo trato que uno dado de alta a mano.
+      if (esNuevo) {
         try {
-          await altaEnGhl(cliente.nombre, cliente.email, cliente.telefono);
+          await invitarASkool(cliente.email);
+          await marcarInvitacionSkoolEnviada(cliente.id);
         } catch {
           // Best-effort: no bloquea el resto de la sincronización.
         }
-        await marcarMensajeBienvenidaWa(cliente.id, "Pendiente");
+
+        if (cliente.telefono) {
+          // "Enviado" nunca se escribe aquí — solo el webhook de confirmación
+          // real (/api/webhooks/ghl-bienvenida-wa) lo hace, cuando GHL avisa
+          // que WhatsApp de verdad lo entregó.
+          try {
+            await altaEnGhl(cliente.nombre, cliente.email, cliente.telefono);
+          } catch {
+            // Best-effort: no bloquea el resto de la sincronización.
+          }
+          await marcarMensajeBienvenidaWa(cliente.id, "Pendiente");
+        }
       }
+      procesados++;
+      ultimoProcesado = c.creadoEn;
+    } catch (err) {
+      // registrarTagKajabi puede fallar por rate-limiting de Kajabi si esta
+      // corrida tiene muchas altas nuevas de golpe (mismo problema que tuvo
+      // el backfill inicial con 158 clientes de un jalón). En vez de tronar
+      // toda la función (y perder el progreso de los que sí se alcanzaron a
+      // procesar), se corta aquí: el cursor avanza solo hasta el último
+      // cliente realmente procesado, y los que quedaron pendientes se
+      // recogen en la siguiente corrida del cron (~15 min) sin duplicar
+      // nada — registrarTagKajabi es idempotente si un cliente ya existe.
+      console.error("Sincronización de Kajabi interrumpida, se reintentará en la siguiente corrida:", err);
+      break;
     }
   }
-  if (nuevos.length > 0) {
-    await guardarCursorSyncKajabi(nuevos[nuevos.length - 1].creadoEn);
+  if (ultimoProcesado) {
+    await guardarCursorSyncKajabi(ultimoProcesado);
   }
 
-  return NextResponse.json({ ok: true, procesados: nuevos.length });
+  return NextResponse.json({ ok: true, procesados, detectados: nuevos.length });
 }

@@ -46,18 +46,22 @@ export async function POST(req: NextRequest) {
 
   const actualizado = await actualizarTelefonoCliente(cliente.id, datos.telefono);
 
-  // Ya se pudo mandar antes (Enviado) o alguien lo marcó a mano como Número
-  // Inválido — no se reintenta por encima de eso, solo cuando de verdad
-  // nunca se pudo mandar por falta de teléfono.
+  // "Enviado" nunca se escribe aquí, ni siquiera si el alta en GHL salió
+  // bien — eso solo confirma que se pidió el envío, no que WhatsApp lo
+  // entregó de verdad. La única fuente de verdad es el webhook de
+  // confirmación real (/api/webhooks/ghl-bienvenida-wa), que corrige esto
+  // más tarde. Ya se pudo mandar antes (Enviado, confirmado por ese webhook)
+  // o alguien lo marcó a mano como Número Inválido — no se reintenta por
+  // encima de eso, solo cuando de verdad nunca se pudo mandar por falta de
+  // teléfono.
   let avisoWa: string | null = null;
   if (actualizado.contactoWhats !== "Enviado" && actualizado.contactoWhats !== "Número Inválido") {
     try {
       await altaEnGhl(actualizado.nombre, actualizado.email, datos.telefono);
-      await marcarMensajeBienvenidaWa(actualizado.id, "Enviado");
     } catch (err) {
       avisoWa = err instanceof Error ? err.message : "No se pudo enviar el WhatsApp de bienvenida";
-      await marcarMensajeBienvenidaWa(actualizado.id, "Pendiente");
     }
+    await marcarMensajeBienvenidaWa(actualizado.id, "Pendiente");
   }
 
   return NextResponse.json({ ok: true, telefonoActualizado: true, avisoWa });

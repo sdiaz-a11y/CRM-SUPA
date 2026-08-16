@@ -15,7 +15,7 @@ export function normalizarEmail(email: string): string {
 // número, sin el "+"). Se antepone si falta para que quede en formato E.164
 // — lo necesitan tanto el envío de WhatsApp por GHL como los links de
 // wa.me/tel: del panel del cliente.
-function normalizarTelefono(telefono?: string | null): string | null {
+export function normalizarTelefono(telefono?: string | null): string | null {
   const limpio = telefono?.trim();
   if (!limpio) return null;
   return limpio.startsWith("+") ? limpio : `+${limpio}`;
@@ -102,10 +102,12 @@ export type FiltrosClientes = {
   pagina?: number;
 };
 
-// Escapa comas (separador de condiciones en `.or()`) y comodines de ILIKE
-// en texto libre de búsqueda, para que no rompan el filtro de PostgREST.
+// Quita comas (separador de condiciones en `.or()`), paréntesis (agrupan
+// lógica anidada en ese mismo DSL) y comodines de ILIKE del texto libre de
+// búsqueda — cualquiera de esos caracteres rompe el parseo del filtro en
+// PostgREST (probado: buscar "algo)" tira un error 500 en vez de resultados).
 function sanearBusqueda(q: string): string {
-  return q.replace(/[,%*]/g, "");
+  return q.replace(/[,%*()]/g, "");
 }
 
 // Aplica los filtros de la lista de clientes (búsqueda, estado, región,
@@ -954,7 +956,11 @@ export async function registrarTagKajabi(
     // automática arranca con teléfono igual que una manual, sin esperar a
     // que alguien lo escriba a mano.
     const telefonoPendiente = await tomarTelefonoPendienteHotmart(id);
-    const telefono = telefonoPendiente ?? (await obtenerPerfilKajabi(id).catch(() => null))?.telefono ?? null;
+    const telefonoCrudo = telefonoPendiente ?? (await obtenerPerfilKajabi(id).catch(() => null))?.telefono ?? null;
+    // Mismo formato E.164 ("+...") que actualizarTelefonoCliente usa cuando
+    // el cliente ya existe — sin esto, un alta automática (ésta) quedaba con
+    // un teléfono sin "+" y el link tel: del panel del cliente salía roto.
+    const telefono = normalizarTelefono(telefonoCrudo);
     const { data, error } = await supabase
       .from("clientes")
       .insert({
