@@ -316,14 +316,12 @@ export default function ClientesPage() {
               <div className="flex-1 overflow-auto">
                 <table className="w-full min-w-[1100px] table-fixed text-sm">
                   <colgroup>
+                    <col className="w-[18%]" />
+                    <col className="w-[23%]" />
+                    <col className="w-[13%]" />
                     <col className="w-[16%]" />
-                    <col className="w-[19%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[9%]" />
-                    <col className="w-[13%]" />
-                    <col className="w-[13%]" />
-                    <col className="w-[8%]" />
-                    <col className="w-[10%]" />
+                    <col className="w-[16%]" />
+                    <col className="w-[14%]" />
                   </colgroup>
                   <thead className="sticky top-0 z-10 bg-surface">
                     <tr className="border-b border-silver text-left text-xs font-semibold uppercase tracking-wide text-muted">
@@ -331,10 +329,8 @@ export default function ClientesPage() {
                       <th className="whitespace-nowrap px-5 py-3">Correo</th>
                       <th className="whitespace-nowrap px-5 py-3">Teléfono</th>
                       <th className="whitespace-nowrap px-5 py-3">Evento</th>
-                      <th className="whitespace-nowrap px-5 py-3">Acceso</th>
-                      <th className="whitespace-nowrap px-5 py-3">Msj. bienvenida</th>
+                      <th className="whitespace-nowrap px-5 py-3">Estado</th>
                       <th className="whitespace-nowrap px-5 py-3">Membresía</th>
-                      <th className="whitespace-nowrap px-5 py-3">Vence Skool</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -359,13 +355,9 @@ export default function ClientesPage() {
                           {c.evento || "—"}
                         </td>
                         <td className="px-5 py-2.5">
-                          <PillAcceso valor={c.accesoPlataforma} />
-                        </td>
-                        <td className="truncate px-5 py-2.5 text-muted" title={c.contactoWhats ?? undefined}>
-                          {c.contactoWhats || "—"}
+                          <EstadoOnboarding cliente={c} />
                         </td>
                         <td className="truncate px-5 py-2.5 text-muted">{c.tipoMembresia || "—"}</td>
-                        <td className="truncate px-5 py-2.5 text-muted">{c.vencimientoSkool || "—"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -602,22 +594,43 @@ function CampoFecha({
   );
 }
 
-function PillAcceso({ valor }: { valor: string | null }) {
-  const v = (valor ?? "").trim();
-  const key = v.toLowerCase();
-  const toneClass =
-    key === "si"
-      ? "bg-success/15 text-success"
-      : key === "no"
-        ? "bg-danger/15 text-danger"
-        : key === "revocado"
-          ? "bg-black-access text-white"
-          : key.includes("renov")
-            ? "bg-primary-dim text-primary-deep"
-            : "bg-surface-2 text-muted";
+// Un vistazo a las 3 cosas que pasan al dar de alta a un cliente: acceso en
+// Kajabi (punto), invitación a Skool y mensaje de bienvenida (barritas
+// diagonales) — brillan en verde cuando ya se hicieron, gris cuando no.
+function EstadoOnboarding({ cliente }: { cliente: Cliente }) {
+  const pausado = !!cliente.pausadoEn;
+  const kajabiActivo = cliente.accesoPlataforma?.trim().toLowerCase() === "si" && !pausado;
+  const skoolOk = !!cliente.invitacionSkool;
+  const bienvenidaOk = cliente.contactoWhats === "Enviado";
+
+  const tituloKajabi = pausado ? "Kajabi: pausado" : kajabiActivo ? "Kajabi: acceso activo" : "Kajabi: sin acceso";
+  const tituloSkool = skoolOk ? "Skool: invitación enviada" : "Skool: sin invitación";
+  const tituloBienvenida = bienvenidaOk ? "Mensaje de bienvenida: enviado" : "Mensaje de bienvenida: pendiente";
+
   return (
-    <span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${toneClass}`}>
-      {v || "—"}
-    </span>
+    <div
+      className="flex items-center gap-2"
+      title={`${tituloKajabi} · ${tituloSkool} · ${tituloBienvenida}`}
+    >
+      <span
+        className={`h-2.5 w-2.5 flex-none rounded-full ${
+          pausado
+            ? "bg-warning"
+            : kajabiActivo
+              ? "bg-success shadow-[0_0_6px_var(--color-success)]"
+              : "bg-silver"
+        }`}
+      />
+      <span
+        className={`h-4 w-1.5 flex-none -skew-x-12 rounded-full transition ${
+          skoolOk ? "bg-success shadow-[0_0_6px_var(--color-success)]" : "bg-silver"
+        }`}
+      />
+      <span
+        className={`h-4 w-1.5 flex-none -skew-x-12 rounded-full transition ${
+          bienvenidaOk ? "bg-success shadow-[0_0_6px_var(--color-success)]" : "bg-silver"
+        }`}
+      />
+    </div>
   );
 }
