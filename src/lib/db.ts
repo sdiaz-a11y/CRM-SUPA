@@ -321,11 +321,13 @@ export async function marcarAccesoPlataforma(id: string, valor: string): Promise
 // nunca lo escribe esta función — es una opción exclusivamente manual desde
 // el panel del cliente. Sin `autor` (alta de cliente nuevo) no deja rastro
 // en la timeline, porque ya queda cubierto por el evento "CREACION"; con
-// `autor` (reenvío manual desde el botón "Enviar") sí registra el cambio.
+// `autor` sí registra el cambio — `detalle` deja personalizar ese texto
+// (reenvío manual vs. confirmación real del webhook de GHL).
 export async function marcarMensajeBienvenidaWa(
   id: string,
   estado: Extract<EstadoMensajeBienvenidaWa, "Enviado" | "Pendiente">,
-  autor?: string
+  autor?: string,
+  detalle?: string
 ): Promise<Cliente> {
   const { data, error } = await supabase
     .from("clientes")
@@ -335,7 +337,7 @@ export async function marcarMensajeBienvenidaWa(
     .single();
   if (error) throw error;
   if (autor) {
-    await registrarEvento(id, "EDICION", `Mensaje de Bienvenida WA reenviado — quedó: ${estado}`, autor);
+    await registrarEvento(id, "EDICION", detalle ?? `Mensaje de Bienvenida WA reenviado — quedó: ${estado}`, autor);
   }
   return filaACliente(data as ClienteRow);
 }
