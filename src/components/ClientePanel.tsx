@@ -666,7 +666,7 @@ export function ClientePanel({
           <div className="flex flex-1 items-center justify-center text-sm text-muted">Cargando…</div>
         ) : (
           <>
-            <div className="brand-plate flex-none px-6 pb-5 pt-6 text-white">
+            <div className="brand-plate flex-none px-6 pb-5 pt-[calc(1.5rem+env(safe-area-inset-top))] text-white">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2">
                   <div className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-white/15 text-lg font-semibold">

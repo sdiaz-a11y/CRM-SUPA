@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Eye, EyeOff, LogIn } from "lucide-react";
+import Image from "next/image";
+import { Eye, EyeOff } from "lucide-react";
 import { useSesion } from "@/lib/session-context";
 
 export default function LoginPage() {
@@ -56,16 +57,21 @@ function LoginForm() {
   if (cargando) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand p-6">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand px-6 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
       <form
         onSubmit={onSubmit}
         className="shell w-full max-w-sm rounded-[2rem] p-2 diffused-lg animate-fade-in"
       >
         <div className="core rounded-[calc(2rem-0.5rem)] p-8 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full brand-plate">
-            <LogIn className="h-6 w-6 text-white" strokeWidth={1.5} />
-          </div>
-          <h1 className="text-lg font-semibold text-foreground">Synergy CRM</h1>
+          <Image
+            src="/icons/icon-192.png"
+            alt="CRM CS"
+            width={56}
+            height={56}
+            className="mx-auto mb-4 h-14 w-14 rounded-2xl"
+            priority
+          />
+          <h1 className="text-lg font-semibold text-foreground">CRM CS</h1>
           <p className="mt-1 text-sm text-muted">Inicia sesión con tu correo y contraseña.</p>
 
           <input

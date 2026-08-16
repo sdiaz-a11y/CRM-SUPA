@@ -223,7 +223,7 @@ export function ImportarClientesModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/30 p-6 backdrop-blur-[2px]"
+      className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-foreground/30 p-6 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))] backdrop-blur-[2px]"
       onClick={(e) => e.target === e.currentTarget && !procesando && onClose()}
     >
       <div className="shell w-full max-w-3xl rounded-[2rem] p-2 diffused-lg animate-fade-in">

@@ -132,7 +132,7 @@ export default function ActividadPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-foreground">Actividad</h1>
           <p className="text-sm text-muted">
@@ -196,7 +196,7 @@ export default function ActividadPage() {
         </div>
       </div>
 
-      <div className="shell flex h-[calc(100vh-21rem)] flex-col rounded-[1.75rem] p-2 diffused">
+      <div className="shell flex min-h-[24rem] flex-col rounded-[1.75rem] p-2 diffused md:h-[calc(100vh-21rem)]">
         <div className="core flex flex-1 flex-col overflow-hidden rounded-[calc(1.75rem-0.5rem)]">
           {cargando ? (
             <p className="p-8 text-center text-sm text-muted">Cargando actividad…</p>

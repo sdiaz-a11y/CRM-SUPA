@@ -50,7 +50,7 @@ export default function EliminadosPage() {
         />
       </div>
 
-      <div className="shell flex h-[calc(100vh-14rem)] flex-col rounded-[1.75rem] p-2 diffused">
+      <div className="shell flex min-h-[24rem] flex-col rounded-[1.75rem] p-2 diffused md:h-[calc(100vh-14rem)]">
         <div className="core flex flex-1 flex-col overflow-hidden rounded-[calc(1.75rem-0.5rem)]">
           {cargando ? (
             <p className="p-8 text-center text-sm text-muted">Cargando…</p>

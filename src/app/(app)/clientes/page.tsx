@@ -163,12 +163,12 @@ export default function ClientesPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-foreground">Clientes</h1>
           <p className="text-sm text-muted">{total.toLocaleString("es-MX")} clientes registrados</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {puedeExportar && (
             <>
               <button
@@ -305,7 +305,7 @@ export default function ClientesPage() {
         </div>
       </div>
 
-      <div className="shell flex h-[calc(100vh-21rem)] flex-col rounded-[1.75rem] p-2 diffused">
+      <div className="shell flex min-h-[24rem] flex-col rounded-[1.75rem] p-2 diffused md:h-[calc(100vh-21rem)]">
         <div className="core flex flex-1 flex-col overflow-hidden rounded-[calc(1.75rem-0.5rem)]">
           {cargando ? (
             <p className="p-8 text-center text-sm text-muted">Cargando clientes…</p>

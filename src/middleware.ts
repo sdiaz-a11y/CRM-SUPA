@@ -37,5 +37,10 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // manifest.webmanifest/sw.js/icons/*/icon.png/apple-icon.png tienen que
+  // quedar fuera del middleware igual que favicon.ico: el sistema operativo
+  // los pide para decidir si la app es instalable (Agregar a pantalla de
+  // inicio) sin que haya una sesión iniciada todavía — si el middleware los
+  // redirige a /login, iOS/Android nunca ven el manifest ni los íconos.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|icons/|icon.png|apple-icon.png).*)"],
 };

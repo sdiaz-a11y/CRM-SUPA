@@ -56,6 +56,14 @@ body {
   padding-right: env(safe-area-inset-right, 0px);
 }
 
+/* position:fixed ignora el padding del body (se posiciona contra el
+   viewport, no contra la caja con padding) — por eso cada overlay de
+   pantalla completa (login, panel de cliente, drawer del menú móvil) suma
+   env(safe-area-inset-*) a su propio padding en vez de confiar en uno
+   heredado. Se hace inline con clases arbitrarias de Tailwind
+   (pt-[calc(_+env(safe-area-inset-top))]) en cada componente, para no
+   pisar el padding base ya pensado para cada uno. */
+
 @layer utilities {
   .bg-mesh {
     background-image:
@@ -136,6 +144,21 @@ body {
 
   .animate-slide-in-right {
     animation: slide-in-right 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  @keyframes slide-in-left {
+    from {
+      opacity: 0;
+      transform: translateX(-24px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .animate-slide-in-left {
+    animation: slide-in-left 0.28s cubic-bezier(0.32, 0.72, 0, 1);
   }
 
   /* Fondo de marca: azul tecno profundo con destellos diagonales. */
