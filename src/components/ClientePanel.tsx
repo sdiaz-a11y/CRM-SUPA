@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
   X,
@@ -140,6 +141,7 @@ export function ClientePanel({
   const puedeEliminar = !!usuario && tienePermiso(usuario.rol, "eliminarCliente");
   const puedeRenovar = !!usuario && tienePermiso(usuario.rol, "renovarMembresia");
   const puedePausar = !!usuario && tienePermiso(usuario.rol, "pausarMembresia");
+  const puedeVerActividad = !!usuario && tienePermiso(usuario.rol, "verActividad");
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [eventos, setEventos] = useState<EventoTimeline[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -1545,6 +1547,16 @@ export function ClientePanel({
                       <Send className="h-4 w-4" strokeWidth={1.75} />
                     </button>
                   </div>
+                  )}
+                  {puedeVerActividad && (
+                    <div className="mb-3 flex justify-end">
+                      <Link
+                        href={`/actividad?cliente=${encodeURIComponent(clienteId)}`}
+                        className="ease-spring text-xs font-medium text-primary transition hover:text-primary-deep"
+                      >
+                        Ver reporte completo →
+                      </Link>
+                    </div>
                   )}
                   <Timeline eventos={eventos} />
                 </div>

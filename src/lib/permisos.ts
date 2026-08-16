@@ -11,6 +11,7 @@ export const ROLES: Rol[] = ["admin", "coordinador", "abeja"];
 export const PERMISOS = {
   verClientes: ["admin", "coordinador", "abeja"],
   verDashboard: ["admin"],
+  verActividad: ["admin", "coordinador"],
   verEliminados: ["admin"],
   verBiblioteca: ["admin"],
   crearCliente: ["admin"],

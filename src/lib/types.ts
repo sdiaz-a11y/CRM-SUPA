@@ -72,14 +72,40 @@ export type Cliente = {
 
 export type TipoEvento =
   | "CREACION"
-  | "EDICION"
+  | "EDICION" // legado — ya no se escribe, se dejó por los eventos viejos ya guardados
+  | "EDICION_DATOS"
+  | "EDICION_ACCESOS"
+  | "EDICION_TAGS"
   | "NOTA"
-  | "ACCESO_GENERAL"
-  | "ACCESO_VIP"
-  | "ACCESO_BLACK"
+  | "ACCESO_GENERAL" // legado
+  | "ACCESO_VIP" // legado
+  | "ACCESO_BLACK" // legado
+  | "PAUSA"
+  | "REANUDACION"
+  | "RENOVACION"
+  | "WA_BIENVENIDA"
   | "IMPORTACION"
   | "KAJABI"
   | "ELIMINADO";
+
+// Tipos "activos": los que el buscador de Actividad ofrece para filtrar. Los
+// marcados como legado arriba solo existen en eventos viejos ya guardados —
+// se siguen mostrando si aparecen, pero no tiene caso ofrecerlos como opción
+// de filtro nueva.
+export const TIPOS_EVENTO_FILTRABLES: TipoEvento[] = [
+  "CREACION",
+  "EDICION_DATOS",
+  "EDICION_ACCESOS",
+  "EDICION_TAGS",
+  "NOTA",
+  "PAUSA",
+  "REANUDACION",
+  "RENOVACION",
+  "WA_BIENVENIDA",
+  "IMPORTACION",
+  "KAJABI",
+  "ELIMINADO",
+];
 
 export type EventoTimeline = {
   id: string;
@@ -88,6 +114,27 @@ export type EventoTimeline = {
   detalle: string;
   autor: string;
   fecha: string; // ISO
+};
+
+// Nombre a mostrar para cada tipo de evento — compartido entre la Timeline
+// del perfil del cliente y la página de Actividad (búsqueda/filtros/reportes).
+export const TIPO_EVENTO_LABEL: Record<TipoEvento, string> = {
+  CREACION: "Cliente creado",
+  EDICION: "Datos editados",
+  EDICION_DATOS: "Datos editados",
+  EDICION_ACCESOS: "Accesos editados",
+  EDICION_TAGS: "Tags editados",
+  NOTA: "Nota",
+  ACCESO_GENERAL: "Acceso General",
+  ACCESO_VIP: "Acceso VIP",
+  ACCESO_BLACK: "Black Access",
+  PAUSA: "Membresía pausada",
+  REANUDACION: "Membresía reanudada",
+  RENOVACION: "Membresía renovada",
+  WA_BIENVENIDA: "Mensaje de Bienvenida WA",
+  IMPORTACION: "Importado",
+  KAJABI: "Kajabi",
+  ELIMINADO: "Cliente eliminado",
 };
 
 export type Db = {

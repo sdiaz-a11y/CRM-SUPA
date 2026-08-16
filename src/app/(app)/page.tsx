@@ -10,9 +10,6 @@ import {
   AlertTriangle,
   TrendingUp,
 } from "lucide-react";
-import { Timeline } from "@/components/Timeline";
-import type { EventoTimeline } from "@/lib/types";
-
 type Resumen = {
   totalClientes: number;
   conAcceso: number;
@@ -24,7 +21,6 @@ type Resumen = {
   distribucionAcceso: { nombre: string; cantidad: number }[];
   inscripcionesPorMes: { mes: string; cantidad: number; acumulado: number }[];
   topMembresias: { nombre: string; cantidad: number }[];
-  eventosRecientes: (EventoTimeline & { clienteNombre: string })[];
 };
 
 const COLORES_DONA = ["#ef4444", "#10b981", "#0a5cff", "#f59e0b", "#8b5cf6", "#5b6472"];
@@ -141,23 +137,6 @@ export default function DashboardPage() {
               <p className="py-16 text-center text-sm text-muted">Cargando…</p>
             )}
           </div>
-        </div>
-      </div>
-
-      <div className="mt-6 shell rounded-[2rem] p-2 diffused-lg">
-        <div className="core rounded-[calc(2rem-0.5rem)] p-6">
-          <h3 className="mb-5 text-xs font-semibold uppercase tracking-[0.15em] text-muted">
-            Actividad reciente
-          </h3>
-          {resumen ? (
-            resumen.eventosRecientes.length > 0 ? (
-              <Timeline eventos={resumen.eventosRecientes} />
-            ) : (
-              <p className="text-sm text-muted">Todavía no hay actividad registrada.</p>
-            )
-          ) : (
-            <p className="text-sm text-muted">Cargando…</p>
-          )}
         </div>
       </div>
     </div>

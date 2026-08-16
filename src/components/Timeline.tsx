@@ -8,32 +8,34 @@ import {
   UploadCloud,
   Tag,
   Trash2,
+  Tags,
+  PauseCircle,
+  PlayCircle,
+  RefreshCw,
+  MessageCircle,
 } from "lucide-react";
-import type { EventoTimeline, TipoEvento } from "@/lib/types";
+import { TIPO_EVENTO_LABEL, type EventoTimeline, type TipoEvento } from "@/lib/types";
 
 const ICONS: Record<TipoEvento, typeof UserPlus> = {
   CREACION: UserPlus,
   EDICION: Pencil,
+  EDICION_DATOS: Pencil,
+  EDICION_ACCESOS: ShieldCheck,
+  EDICION_TAGS: Tags,
   NOTA: StickyNote,
   ACCESO_GENERAL: ShieldCheck,
   ACCESO_VIP: Crown,
   ACCESO_BLACK: Gem,
+  PAUSA: PauseCircle,
+  REANUDACION: PlayCircle,
+  RENOVACION: RefreshCw,
+  WA_BIENVENIDA: MessageCircle,
   IMPORTACION: UploadCloud,
   KAJABI: Tag,
   ELIMINADO: Trash2,
 };
 
-const LABEL: Record<TipoEvento, string> = {
-  CREACION: "Cliente creado",
-  EDICION: "Datos editados",
-  NOTA: "Nota",
-  ACCESO_GENERAL: "Acceso General",
-  ACCESO_VIP: "Acceso VIP",
-  ACCESO_BLACK: "Black Access",
-  IMPORTACION: "Importado",
-  KAJABI: "Kajabi",
-  ELIMINADO: "Cliente eliminado",
-};
+const LABEL = TIPO_EVENTO_LABEL;
 
 export function Timeline({ eventos }: { eventos: EventoTimeline[] }) {
   if (eventos.length === 0) {

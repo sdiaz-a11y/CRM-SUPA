@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requerirPermiso } from "@/lib/auth";
-import { listarEventosGlobal, listarTodosClientes } from "@/lib/db";
+import { listarTodosClientes } from "@/lib/db";
 import { parsearFechaSkool } from "@/lib/fechas";
 
 // Este endpoint pagina la tabla completa de clientes para las agregaciones
@@ -41,7 +41,7 @@ export async function GET() {
   const permiso = await requerirPermiso("verDashboard");
   if (!permiso.ok) return permiso.respuesta;
 
-  const [clientes, eventos] = await Promise.all([listarTodosClientes(), listarEventosGlobal(30)]);
+  const clientes = await listarTodosClientes();
 
   const ahora = new Date();
   const hace30Dias = Date.now() - 30 * 24 * 60 * 60 * 1000;
@@ -120,10 +120,6 @@ export async function GET() {
     distribucionAcceso: agruparTopMasOtros(distribucionAcceso, 5),
     inscripcionesPorMes,
     topMembresias,
-    eventosRecientes: eventos.map((e) => {
-      const cliente = clientes.find((c) => c.id === e.clienteId);
-      return { ...e, clienteNombre: cliente?.nombre ?? e.clienteId };
-    }),
   };
 
   return NextResponse.json(resumen);

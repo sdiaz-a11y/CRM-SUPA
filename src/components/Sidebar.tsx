@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Sparkles, LogOut, Library, Trash2, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Users, Sparkles, LogOut, Library, Trash2, ShieldCheck, History } from "lucide-react";
 import { useSesion } from "@/lib/session-context";
 import { tienePermiso, type Accion, type Rol } from "@/lib/permisos";
 
@@ -13,6 +13,7 @@ import { tienePermiso, type Accion, type Rol } from "@/lib/permisos";
 const NAV: { href: string; label: string; icon: typeof LayoutDashboard; permiso: Accion }[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, permiso: "verDashboard" },
   { href: "/clientes", label: "Clientes", icon: Users, permiso: "verClientes" },
+  { href: "/actividad", label: "Actividad", icon: History, permiso: "verActividad" },
   { href: "/biblioteca", label: "Biblioteca", icon: Library, permiso: "verBiblioteca" },
   { href: "/eliminados", label: "Eliminados", icon: Trash2, permiso: "verEliminados" },
   { href: "/usuarios", label: "Usuarios", icon: ShieldCheck, permiso: "gestionarUsuarios" },

@@ -225,24 +225,126 @@ export async function listarEventos(clienteId: string): Promise<EventoTimeline[]
   }));
 }
 
-export async function listarEventosGlobal(limite = 15): Promise<EventoTimeline[]> {
-  // La IMPORTACION masiva del CSV genera miles de eventos idénticos con el
-  // mismo timestamp: no aportan nada en "Actividad reciente", se excluyen.
+// Evento de la timeline con el nombre/correo del cliente ya resuelto (join a
+// clientes) — lo usa la página de Actividad para no tener que cruzar listas
+// en el cliente. cliente_id nunca queda huérfano (FK not null con cascade),
+// así que el join siempre encuentra al cliente, incluso si está archivado
+// ("Eliminados" es borrado suave, la fila sigue existiendo).
+export type EventoConCliente = EventoTimeline & { clienteNombre: string; clienteEmail: string };
+
+export type FiltrosEventos = {
+  busqueda?: string; // texto libre: detalle, autor, nombre/correo del cliente
+  tipos?: TipoEvento[];
+  clienteId?: string; // acota a un solo cliente (link "ver actividad" desde su perfil)
+  desde?: string; // ISO — fecha del evento >=
+  hasta?: string; // ISO — fecha del evento <=
+  limite?: number;
+  pagina?: number;
+};
+
+// PostgREST no soporta filtrar columnas de una tabla embebida (clientes.nombre)
+// dentro de un or() junto a columnas propias — solo permite un nivel de dot
+// (columna.operador.valor). Por eso la búsqueda por nombre/correo de cliente
+// se resuelve aparte: primero se buscan los ids de clientes que matcheen, y
+// esos ids se agregan como una condición más (cliente_id.in.(...)) al or()
+// de eventos_timeline, que sí es una tabla propia.
+async function idsClientesPorBusqueda(busqueda: string): Promise<string[]> {
+  const q = sanearBusqueda(busqueda.trim());
+  if (!q) return [];
   const { data, error } = await supabase
-    .from("eventos_timeline")
-    .select("*")
-    .neq("tipo", "IMPORTACION")
-    .order("fecha", { ascending: false })
-    .limit(limite);
+    .from("clientes")
+    .select("id")
+    .or(`nombre.ilike.%${q}%,email.ilike.%${q}%`)
+    .limit(500);
   if (error) throw error;
-  return (data ?? []).map((e) => ({
+  return (data ?? []).map((c) => c.id as string);
+}
+
+// Arma la condición or() de búsqueda de texto libre una sola vez (no por
+// página): detalle/autor propios de eventos_timeline, más los ids de
+// clientes cuyo nombre o correo matcheen.
+async function condicionBusquedaEventos(busqueda?: string): Promise<string | null> {
+  const raw = busqueda?.trim();
+  if (!raw) return null;
+  const q = sanearBusqueda(raw);
+  const idsCliente = await idsClientesPorBusqueda(raw);
+  const condiciones = [`detalle.ilike.%${q}%`, `autor.ilike.%${q}%`];
+  if (idsCliente.length) condiciones.push(`cliente_id.in.(${idsCliente.join(",")})`);
+  return condiciones.join(",");
+}
+
+function aplicarFiltrosEventos<
+  Q extends {
+    or: (s: string) => Q;
+    eq: (columna: string, valor: string) => Q;
+    in: (columna: string, valores: string[]) => Q;
+    gte: (columna: string, valor: string) => Q;
+    lte: (columna: string, valor: string) => Q;
+  },
+>(query: Q, opciones: Omit<FiltrosEventos, "busqueda"> | undefined, condicionBusqueda: string | null): Q {
+  if (opciones?.tipos?.length) query = query.in("tipo", opciones.tipos);
+  if (opciones?.clienteId) query = query.eq("cliente_id", opciones.clienteId);
+  if (opciones?.desde) query = query.gte("fecha", opciones.desde);
+  if (opciones?.hasta) query = query.lte("fecha", opciones.hasta);
+  if (condicionBusqueda) query = query.or(condicionBusqueda);
+  return query;
+}
+
+function filaAEventoConCliente(e: {
+  id: string;
+  cliente_id: string;
+  tipo: TipoEvento;
+  detalle: string;
+  autor: string;
+  fecha: string;
+  clientes: { nombre: string; email: string } | null;
+}): EventoConCliente {
+  return {
     id: e.id,
     clienteId: e.cliente_id,
     tipo: e.tipo,
     detalle: e.detalle,
     autor: e.autor,
     fecha: e.fecha,
-  }));
+    clienteNombre: e.clientes?.nombre ?? e.cliente_id,
+    clienteEmail: e.clientes?.email ?? e.cliente_id,
+  };
+}
+
+export async function listarEventosFiltrados(opciones?: FiltrosEventos): Promise<{
+  eventos: EventoConCliente[];
+  total: number;
+}> {
+  const limite = opciones?.limite ?? 50;
+  const pagina = Math.max(1, opciones?.pagina ?? 1);
+  const inicio = (pagina - 1) * limite;
+
+  const condicionBusqueda = await condicionBusquedaEventos(opciones?.busqueda);
+  let query = supabase.from("eventos_timeline").select("*, clientes!inner(nombre,email)", { count: "exact" });
+  query = aplicarFiltrosEventos(query, opciones, condicionBusqueda);
+  query = query.order("fecha", { ascending: false }).range(inicio, inicio + limite - 1);
+
+  const { data, error, count } = await query;
+  if (error) throw error;
+
+  return { eventos: (data ?? []).map(filaAEventoConCliente), total: count ?? 0 };
+}
+
+const CAP_EXPORTACION_EVENTOS = 50_000;
+
+// Trae TODOS los eventos que matcheen los filtros (sin paginar), para el
+// botón "Descargar CSV" de Actividad — mismo patrón que exportarClientes.
+export async function exportarEventos(opciones?: FiltrosEventos): Promise<EventoConCliente[]> {
+  const condicionBusqueda = await condicionBusquedaEventos(opciones?.busqueda);
+  const filas = await traerTodo<Parameters<typeof filaAEventoConCliente>[0]>((from, to) => {
+    let query = supabase.from("eventos_timeline").select("*, clientes!inner(nombre,email)");
+    query = aplicarFiltrosEventos(query, opciones, condicionBusqueda);
+    return query.order("fecha", { ascending: false }).range(from, to);
+  });
+  if (filas.length > CAP_EXPORTACION_EVENTOS) {
+    throw new Error("Demasiados resultados para exportar — aplica filtros para reducir la lista.");
+  }
+  return filas.map(filaAEventoConCliente);
 }
 
 async function regionParaCrearOEditar(evento: string | null, pais: string | null): Promise<string> {
@@ -338,7 +440,7 @@ export async function marcarMensajeBienvenidaWa(
     .single();
   if (error) throw error;
   if (autor) {
-    await registrarEvento(id, "EDICION", detalle ?? `Mensaje de Bienvenida WA reenviado — quedó: ${estado}`, autor);
+    await registrarEvento(id, "WA_BIENVENIDA", detalle ?? `Mensaje de Bienvenida WA reenviado — quedó: ${estado}`, autor);
   }
   return filaACliente(data as ClienteRow);
 }
@@ -370,7 +472,7 @@ export async function establecerMensajeBienvenidaWa(
   if (error) throw error;
 
   if (anterior !== estado) {
-    await registrarEvento(id, "EDICION", `Mensaje de Bienvenida WA: "${anterior}" → "${estado}"`, autor);
+    await registrarEvento(id, "WA_BIENVENIDA", `Mensaje de Bienvenida WA: "${anterior}" → "${estado}"`, autor);
   }
   return filaACliente(data as ClienteRow);
 }
@@ -386,7 +488,7 @@ export async function actualizarTelefonoCliente(id: string, telefono: string): P
     .select("*")
     .single();
   if (error) throw error;
-  await registrarEvento(id, "EDICION", "Teléfono completado desde Hotmart", "Hotmart");
+  await registrarEvento(id, "EDICION_DATOS", "Teléfono completado desde Hotmart", "Hotmart");
   return filaACliente(data as ClienteRow);
 }
 
@@ -481,7 +583,7 @@ export async function renovarMembresia(id: string, autor: string): Promise<Clien
     .single();
   if (error) throw error;
 
-  await registrarEvento(id, "EDICION", `Membresía renovada — Fin de acceso: ${formatearFechaSkool(new Date(finAcceso))}`, autor);
+  await registrarEvento(id, "RENOVACION", `Membresía renovada — Fin de acceso: ${formatearFechaSkool(new Date(finAcceso))}`, autor);
   return filaACliente(data as ClienteRow);
 }
 
@@ -519,7 +621,7 @@ export async function pausarMembresia(id: string, autor: string): Promise<Client
     .single();
   if (error) throw error;
 
-  await registrarEvento(id, "EDICION", `Membresía pausada por ${autor}`, autor);
+  await registrarEvento(id, "PAUSA", `Membresía pausada por ${autor}`, autor);
   return filaACliente(data as ClienteRow);
 }
 
@@ -572,7 +674,7 @@ export async function reanudarMembresia(id: string, autor: string): Promise<Resu
 
   await registrarEvento(
     id,
-    "EDICION",
+    "REANUDACION",
     `Membresía reanudada por ${autor} — ${diasRestantes} días restantes, fin de acceso recalculado a ${formatearFechaSkool(new Date(fechaCalculada))}`,
     autor
   );
@@ -709,7 +811,7 @@ export async function actualizarDatosCliente(
   if (error) throw error;
 
   if (detalle) {
-    await registrarEvento(id, "EDICION", detalle, autor);
+    await registrarEvento(id, "EDICION_DATOS", detalle, autor);
   }
 
   let clienteFinal = filaACliente(data as ClienteRow);
@@ -768,7 +870,7 @@ export async function actualizarAccesos(id: string, nuevosAccesos: Accesos, auto
   if (error) throw error;
 
   if (cambios.length) {
-    await registrarEvento(id, "EDICION", `Accesos — ${cambios.join(" · ")}`, autor);
+    await registrarEvento(id, "EDICION_ACCESOS", `Accesos — ${cambios.join(" · ")}`, autor);
   }
   return filaACliente(data as ClienteRow);
 }
@@ -796,7 +898,7 @@ export async function actualizarTags(id: string, tags: string[], autor: string):
   const detalle = [agregados.length ? `+ ${agregados.join(", ")}` : null, quitados.length ? `− ${quitados.join(", ")}` : null]
     .filter(Boolean)
     .join(" · ");
-  if (detalle) await registrarEvento(id, "EDICION", `Tags: ${detalle}`, autor);
+  if (detalle) await registrarEvento(id, "EDICION_TAGS", `Tags: ${detalle}`, autor);
 
   return filaACliente(data as ClienteRow);
 }
