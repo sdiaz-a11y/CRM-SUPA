@@ -15,7 +15,8 @@
     "migrar-supabase": "tsx scripts/migrar-a-supabase.ts",
     "registrar-webhook-kajabi": "tsx scripts/registrar-webhook-kajabi.ts",
     "crear-admin": "tsx scripts/crear-admin.ts",
-    "backfill-kajabi-clientes": "tsx scripts/backfill-kajabi-clientes.ts"
+    "backfill-kajabi-clientes": "tsx scripts/backfill-kajabi-clientes.ts",
+    "setup-storage-comprobantes": "tsx scripts/setup-storage-comprobantes.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",

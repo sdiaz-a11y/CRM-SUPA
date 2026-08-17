@@ -1,21 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requerirPermiso } from "@/lib/auth";
-import {
-  crearCliente,
-  listarClientes,
-  marcarAccesoPlataforma,
-  marcarInvitacionSkoolEnviada,
-  marcarMensajeBienvenidaWa,
-  recalcularAccesos,
-  registrarTagKajabi,
-  vincularKajabiContactId,
-  type EstadoFiltro,
-  type RegionFiltro,
-  type VigenciaFiltro,
-} from "@/lib/db";
-import { altaEnGhl } from "@/lib/ghl";
-import { altaEnKajabi, KAJABI_TAG_MIEMBRO_DEL_CLUB } from "@/lib/kajabi";
-import { invitarASkool } from "@/lib/skool";
+import { listarClientes, type EstadoFiltro, type RegionFiltro, type VigenciaFiltro } from "@/lib/db";
+import { altaCompletaCliente } from "@/lib/alta-cliente";
 
 export async function GET(req: NextRequest) {
   const permiso = await requerirPermiso("verClientes");
@@ -58,66 +44,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Nombre y correo son obligatorios" }, { status: 400 });
   }
   try {
-    let cliente = await crearCliente({
-      nombre: body.nombre,
-      email: body.email,
-      telefono: body.telefono,
-      pais: body.pais,
-      evento: body.evento,
-      tipoMembresia: body.tipoMembresia,
-      etiqueta: body.etiqueta,
-      autor: permiso.usuario.nombre,
-    });
-
-    // El alta en Kajabi es un efecto secundario del alta en el CRM: si
-    // Kajabi falla (fuera de línea, credenciales vencidas, etc.) el cliente
-    // igual queda creado en el CRM y se avisa del problema, en vez de
-    // bloquear el flujo principal por la disponibilidad de un tercero. El
-    // "Sí" en Acceso a plataforma solo se escribe si Kajabi confirmó el
-    // otorgamiento — es la forma de verificar que sí se dio.
-    let avisoKajabi: string | null = null;
-    try {
-      const kajabiContactId = await altaEnKajabi(cliente.nombre, cliente.email);
-      await vincularKajabiContactId(cliente.id, kajabiContactId);
-      cliente = await marcarAccesoPlataforma(cliente.id, "Si");
-      // Registro inmediato en la timeline: no hay que esperar a que el
-      // sincronizador periódico (cada ~15 min) lo detecte, ya sabemos que
-      // otorgar esta oferta es justo lo que asigna el tag en Kajabi.
-      await registrarTagKajabi(cliente.email, cliente.nombre, KAJABI_TAG_MIEMBRO_DEL_CLUB);
-      // Con el acceso ya confirmado, se calculan los boletos (General/VIP/
-      // Black) igual que lo haría `npm run asignar-boletos` en lote.
-      cliente = await recalcularAccesos(cliente.id);
-    } catch (err) {
-      avisoKajabi = err instanceof Error ? err.message : "No se pudo otorgar el acceso en Kajabi";
-    }
-
-    // Igual de resiliente: la invitación a Skool no bloquea el alta si el
-    // servicio falla.
-    let avisoSkool: string | null = null;
-    try {
-      await invitarASkool(cliente.email);
-      cliente = await marcarInvitacionSkoolEnviada(cliente.id);
-    } catch (err) {
-      avisoSkool = err instanceof Error ? err.message : "No se pudo enviar la invitación a Skool";
-    }
-
-    // Igual de resiliente: crea/actualiza el contacto en GHL y le pone el
-    // tag que dispara el Workflow de bienvenida por WhatsApp. El envío en sí
-    // lo hace ese Workflow (la API pública no puede disparar plantillas
-    // nativas de WhatsApp Business directamente).
-    let avisoGhl: string | null = null;
-    try {
-      await altaEnGhl(cliente.nombre, cliente.email, cliente.telefono);
-    } catch (err) {
-      avisoGhl = err instanceof Error ? err.message : "No se pudo dar de alta en GoHighLevel";
-    }
-    // "Enviado" nunca se escribe aquí, ni siquiera si el alta en GHL salió
-    // bien — eso solo confirma que se pidió el envío, no que WhatsApp lo
-    // entregó. La única fuente de verdad es el webhook de confirmación real
-    // (/api/webhooks/ghl-bienvenida-wa), que corrige esto más tarde.
-    if (cliente.telefono) {
-      cliente = await marcarMensajeBienvenidaWa(cliente.id, "Pendiente");
-    }
+    const { cliente, avisoKajabi, avisoSkool, avisoGhl } = await altaCompletaCliente(
+      {
+        nombre: body.nombre,
+        email: body.email,
+        telefono: body.telefono,
+        pais: body.pais,
+        evento: body.evento,
+        tipoMembresia: body.tipoMembresia,
+        etiqueta: body.etiqueta,
+      },
+      permiso.usuario.nombre
+    );
 
     return NextResponse.json({ cliente, avisoKajabi, avisoSkool, avisoGhl });
   } catch (err) {

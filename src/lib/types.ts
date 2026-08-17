@@ -147,3 +147,30 @@ export type Db = {
 // "Número Inválido" es exclusivamente una elección manual del equipo.
 export const ESTADOS_MENSAJE_BIENVENIDA_WA = ["Enviado", "Pendiente", "Número Inválido"] as const;
 export type EstadoMensajeBienvenidaWa = (typeof ESTADOS_MENSAJE_BIENVENIDA_WA)[number];
+
+// Solicitud de alta de cliente hecha por un vendedor (cualquier rol) desde
+// "Solicitudes" en el menú — sustituye el flujo de mandar los datos por
+// WhatsApp. Queda pendiente hasta que un admin la aprueba (crea el cliente
+// de verdad, con Kajabi/Skool/GHL) o la rechaza.
+export const ESTADOS_SOLICITUD = ["pendiente", "aprobada", "rechazada"] as const;
+export type EstadoSolicitud = (typeof ESTADOS_SOLICITUD)[number];
+
+export type SolicitudCliente = {
+  id: string;
+  nombre: string;
+  correoPago: string;
+  correoAcceso: string;
+  telefono: string;
+  pais: string | null;
+  evento: string;
+  tipoMembresia: string;
+  comprobantes: string[]; // rutas en el bucket privado "comprobantes-pago"
+  estado: EstadoSolicitud;
+  solicitadoPorId: string;
+  solicitadoPorNombre: string;
+  notaRevision: string | null;
+  revisadoPor: string | null;
+  revisadoEn: string | null;
+  clienteId: string | null;
+  creadoEn: string;
+};

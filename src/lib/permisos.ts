@@ -20,6 +20,8 @@ export const PERMISOS = {
   eliminarCliente: ["admin"],
   renovarMembresia: ["admin"],
   pausarMembresia: ["admin"],
+  solicitarCliente: ["admin", "coordinador", "abeja"],
+  revisarSolicitudes: ["admin"],
   agregarNota: ["admin", "coordinador"],
   exportarCsv: ["admin", "coordinador"],
   importarCsv: ["admin"],

@@ -251,3 +251,33 @@ create table if not exists hotmart_pendientes (
   recibido_en timestamptz not null default now()
 );
 alter table hotmart_pendientes enable row level security;
+
+-- Solicitudes de alta de cliente: los vendedores (admin/coordinador/abeja)
+-- ya no mandan los datos del cliente por WhatsApp, los llenan aquí junto con
+-- el comprobante de pago. Queda "pendiente" hasta que un admin la revisa y
+-- aprueba (ahí sí se crea el cliente de verdad, con sus efectos en
+-- Kajabi/Skool/GHL) o la rechaza.
+create table if not exists solicitudes_cliente (
+  id uuid primary key default gen_random_uuid(),
+  nombre text not null,
+  correo_pago text not null,
+  correo_acceso text not null,
+  telefono text not null,
+  pais text,
+  evento text not null,
+  tipo_membresia text not null,
+  -- Rutas dentro del bucket privado "comprobantes-pago" (Supabase Storage),
+  -- no URLs públicas — se firman al vuelo para mostrarlas.
+  comprobantes text[] not null default '{}',
+  estado text not null default 'pendiente' check (estado in ('pendiente', 'aprobada', 'rechazada')),
+  solicitado_por_id uuid not null references usuarios (id),
+  solicitado_por_nombre text not null,
+  nota_revision text,
+  revisado_por text,
+  revisado_en timestamptz,
+  cliente_id text references clientes (id),
+  creado_en timestamptz not null default now()
+);
+create index if not exists idx_solicitudes_estado on solicitudes_cliente (estado, creado_en desc);
+create index if not exists idx_solicitudes_solicitado_por on solicitudes_cliente (solicitado_por_id);
+alter table solicitudes_cliente enable row level security;
