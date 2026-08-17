@@ -62,56 +62,29 @@ export default function DashboardPage() {
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-muted">
           Análisis visual <span className="normal-case tracking-normal text-muted/70">(pasa el cursor para ver detalle)</span>
         </p>
-        {/* Asimétrico a propósito: las líneas necesitan ancho para los 12
-            meses, la dona es naturalmente compacta/circular (mejor en una
-            columna angosta y alta que en una tarjeta cuadrada), y "Top
-            Membresías"/"Crecimiento" casi nunca piden tanto espacio como la
-            gráfica principal. */}
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 md:grid-cols-[2fr_2fr_1.3fr] md:grid-rows-2">
+        {/* Solo 3 gráficas para que cada una tenga espacio real: la principal
+            (Inscripciones) ocupa toda la fila de arriba, ancha y alta para
+            que los 12 meses y sus valores se lean bien; abajo, dona y barras
+            se reparten el ancho con harta altura cada una. */}
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 md:grid-rows-[1.4fr_1fr]">
           <ChartCard
             icon={TrendingUp}
             iconTone="text-primary"
             title="Inscripciones por mes"
             subtitle="Últimos 12 meses · altas en plataforma"
-            className="md:col-start-1 md:row-start-1 md:col-span-2"
           >
             {resumen ? <LineChart datos={resumen.inscripcionesPorMes} /> : <Cargando />}
           </ChartCard>
 
-          <ChartCard
-            title="Acceso a Plataforma"
-            subtitle="Distribución de acceso activo"
-            className="md:col-start-3 md:row-start-1 md:row-span-2"
-          >
-            {resumen ? <Dona datos={resumen.distribucionAcceso} total={resumen.totalClientes} /> : <Cargando />}
-          </ChartCard>
+          <div className="grid min-h-0 grid-cols-1 gap-3 sm:grid-cols-2">
+            <ChartCard title="Acceso a Plataforma" subtitle="Distribución de acceso activo">
+              {resumen ? <Dona datos={resumen.distribucionAcceso} total={resumen.totalClientes} /> : <Cargando />}
+            </ChartCard>
 
-          <ChartCard
-            icon={GraduationCap}
-            iconTone="text-primary"
-            title="Top Membresías Skool"
-            subtitle="Por número de registros"
-            className="md:col-start-1 md:row-start-2"
-          >
-            {resumen ? <BarrasMembresia datos={resumen.topMembresias} /> : <Cargando />}
-          </ChartCard>
-
-          <ChartCard
-            icon={TrendingUp}
-            iconTone="text-success"
-            title="Crecimiento acumulado"
-            subtitle="Total de contactos registrados en el tiempo"
-            className="md:col-start-2 md:row-start-2"
-          >
-            {resumen ? (
-              <LineChart
-                datos={resumen.inscripcionesPorMes.map((d) => ({ mes: d.mes, cantidad: d.acumulado }))}
-                color="#10b981"
-              />
-            ) : (
-              <Cargando />
-            )}
-          </ChartCard>
+            <ChartCard icon={GraduationCap} iconTone="text-primary" title="Top Membresías Skool" subtitle="Por número de registros">
+              {resumen ? <BarrasMembresia datos={resumen.topMembresias} /> : <Cargando />}
+            </ChartCard>
+          </div>
         </div>
       </div>
     </div>
