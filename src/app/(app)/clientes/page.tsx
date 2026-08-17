@@ -13,6 +13,7 @@ import {
   Check,
   Upload,
   Download,
+  SlidersHorizontal,
 } from "lucide-react";
 import type { Cliente } from "@/lib/types";
 import { ClientePanel } from "@/components/ClientePanel";
@@ -56,6 +57,9 @@ export default function ClientesPage() {
   const [descargando, setDescargando] = useState(false);
   const [recargaKey, setRecargaKey] = useState(0);
   const [filtros, setFiltros] = useState(FILTROS_VACIOS);
+  // En celular los filtros arrancan ocultos dentro de una pestaña
+  // desplegable — en escritorio (md+) siempre se ven, sin importar esto.
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
   const [opciones, setOpciones] = useState<{ eventos: string[]; membresias: string[] }>({
     eventos: [],
     membresias: [],
@@ -156,6 +160,16 @@ export default function ClientesPage() {
     !!filtros.hasta ||
     !!filtros.vencidosAntesDe;
   const hayFiltrosOBusqueda = hayFiltrosActivos || !!busqueda.trim();
+  const contadorFiltros = [
+    filtros.estado !== "todos",
+    filtros.region !== "todos",
+    filtros.vigencia !== "actuales",
+    filtros.eventos.length > 0,
+    filtros.membresias.length > 0,
+    !!filtros.desde,
+    !!filtros.hasta,
+    !!filtros.vencidosAntesDe,
+  ].filter(Boolean).length;
 
   const totalPaginas = Math.max(1, Math.ceil(total / LIMITE));
   const inicio = total === 0 ? 0 : (pagina - 1) * LIMITE + 1;
@@ -223,7 +237,29 @@ export default function ClientesPage() {
         />
       </div>
 
-      <div className="shell mb-5 rounded-[1.5rem] p-2 diffused">
+      {/* Celular: los filtros quedan ocultos hasta que se abre esta pestaña
+          — en escritorio el botón no se muestra y el panel siempre está
+          visible (md:hidden / md:block más abajo). */}
+      <button
+        onClick={() => setFiltrosAbiertos((a) => !a)}
+        className="ease-spring mb-3 flex w-full items-center justify-between gap-2 rounded-xl border border-silver bg-surface px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-surface-2 md:hidden"
+      >
+        <span className="flex items-center gap-2">
+          <SlidersHorizontal className="h-4 w-4 text-muted" strokeWidth={1.75} />
+          Filtros
+          {contadorFiltros > 0 && (
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-white">
+              {contadorFiltros}
+            </span>
+          )}
+        </span>
+        <ChevronDown
+          className={`ease-spring h-4 w-4 text-muted transition-transform ${filtrosAbiertos ? "rotate-180" : ""}`}
+          strokeWidth={1.75}
+        />
+      </button>
+
+      <div className={`${filtrosAbiertos ? "animate-fade-in-fast block" : "hidden"} shell mb-5 rounded-[1.5rem] p-2 diffused md:block`}>
         <div className="core space-y-3 rounded-[calc(1.5rem-0.5rem)] p-3.5">
           <div className="flex flex-wrap items-center gap-2">
             <Pildora
