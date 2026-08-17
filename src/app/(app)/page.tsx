@@ -54,57 +54,56 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    // md+: la altura queda acotada a lo que sobra del viewport (100dvh menos
-    // el padding vertical de <main>, md:py-8 = 4rem) para que las 4 gráficas
-    // quepan siempre sin scroll — cada fila se reparte el espacio disponible
-    // con flex/grid en vez de alturas fijas. Debajo de md se deja el scroll
-    // natural (pantallas chicas no alcanzan para todo sin apretar demasiado).
-    <div className="flex flex-col gap-3 md:h-[calc(100dvh-4rem)] md:overflow-hidden">
-      <div>
+    <div>
+      <div className="mb-6">
         <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
         <p className="text-sm text-muted">Resumen general del Club Sinergético.</p>
       </div>
 
-      <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-muted">Resumen general</p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-6">
-          <Kpi icon={Users} label="Total Contactos" sub="registros" value={resumen?.totalClientes} tone="primary" />
-          <Kpi icon={ShieldCheck} label="Con Acceso" sub="plataforma activa" value={resumen?.conAcceso} tone="success" />
-          <Kpi icon={ShieldOff} label="Sin Acceso" sub="sin activar" value={resumen?.sinAcceso} tone="danger" />
-          <Kpi icon={GraduationCap} label="Con Skool" sub="membresía reg." value={resumen?.conSkool} tone="teal" />
-          <Kpi icon={Clock} label="Vencen pronto" sub="≤ 15 días" value={resumen?.vencenPronto} tone="warning" />
-          <Kpi icon={AlertTriangle} label="Vencidas" sub="expiradas" value={resumen?.vencidas} tone="purple" />
-        </div>
+      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.15em] text-muted">Resumen general</p>
+      <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
+        <Kpi icon={Users} label="Total Contactos" sub="registros" value={resumen?.totalClientes} tone="primary" />
+        <Kpi icon={ShieldCheck} label="Con Acceso" sub="plataforma activa" value={resumen?.conAcceso} tone="success" />
+        <Kpi icon={ShieldOff} label="Sin Acceso" sub="sin activar" value={resumen?.sinAcceso} tone="danger" />
+        <Kpi icon={GraduationCap} label="Con Skool" sub="membresía reg." value={resumen?.conSkool} tone="teal" />
+        <Kpi icon={Clock} label="Vencen pronto" sub="≤ 15 días" value={resumen?.vencenPronto} tone="warning" />
+        <Kpi icon={AlertTriangle} label="Vencidas" sub="expiradas" value={resumen?.vencidas} tone="purple" />
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-muted">
-          Análisis visual <span className="normal-case tracking-normal text-muted/70">(pasa el cursor para ver detalle)</span>
-        </p>
-        {/* Solo 3 gráficas para que cada una tenga espacio real: la principal
-            (Inscripciones) ocupa toda la fila de arriba, ancha y alta para
-            que los 12 meses y sus valores se lean bien; abajo, dona y barras
-            se reparten el ancho con harta altura cada una. */}
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 md:grid-rows-[1.4fr_1fr]">
-          <ChartCard
-            icon={TrendingUp}
-            iconTone="text-primary"
-            title="Inscripciones por mes"
-            subtitle="Últimos 12 meses · altas en plataforma"
-          >
-            {resumen ? <LineChart datos={resumen.inscripcionesPorMes} /> : <Cargando />}
-          </ChartCard>
+      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.15em] text-muted">
+        Análisis visual <span className="normal-case tracking-normal text-muted/70">(pasa el cursor para ver detalle)</span>
+      </p>
+      <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <ChartCard
+          icon={TrendingUp}
+          iconTone="text-primary"
+          title="Inscripciones por mes"
+          subtitle="Últimos 12 meses · altas en plataforma"
+          className="lg:col-span-2"
+        >
+          {resumen ? <LineChart datos={resumen.inscripcionesPorMes} /> : <Cargando />}
+        </ChartCard>
 
-          <div className="grid min-h-0 grid-cols-1 gap-3 sm:grid-cols-2">
-            <ChartCard title="Acceso a Plataforma" subtitle="Distribución de acceso activo">
-              {resumen ? <Dona datos={resumen.distribucionAcceso} total={resumen.totalClientes} /> : <Cargando />}
-            </ChartCard>
+        <ChartCard title="Acceso a Plataforma" subtitle="Distribución de acceso activo">
+          {resumen ? <Dona datos={resumen.distribucionAcceso} total={resumen.totalClientes} /> : <Cargando />}
+        </ChartCard>
+      </div>
 
-            <ChartCard icon={GraduationCap} iconTone="text-primary" title="Top Membresías Skool" subtitle="Por número de registros">
-              {resumen ? <BarrasMembresia datos={resumen.topMembresias} /> : <Cargando />}
-            </ChartCard>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <ChartCard icon={GraduationCap} iconTone="text-primary" title="Top Membresías Skool" subtitle="Por número de registros">
+          {resumen ? <BarrasMembresia datos={resumen.topMembresias} /> : <Cargando />}
+        </ChartCard>
+
+        <ChartCard icon={TrendingUp} iconTone="text-success" title="Crecimiento acumulado" subtitle="Total de contactos registrados en el tiempo">
+          {resumen ? (
+            <LineChart
+              datos={resumen.inscripcionesPorMes.map((d) => ({ mes: d.mes, cantidad: d.acumulado }))}
+              color="#10b981"
+            />
+          ) : (
+            <Cargando />
+          )}
+        </ChartCard>
       </div>
     </div>
   );
@@ -130,14 +129,14 @@ function ChartCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`shell flex min-h-0 flex-col rounded-[2rem] p-2 diffused-lg ${className}`}>
-      <div className="core flex min-h-0 flex-1 flex-col rounded-[calc(2rem-0.5rem)] p-4 md:p-5">
+    <div className={`shell rounded-[2rem] p-2 diffused-lg ${className}`}>
+      <div className="core rounded-[calc(2rem-0.5rem)] p-6">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
           {Icon && <Icon className={`h-4 w-4 ${iconTone}`} strokeWidth={1.75} />}
           {title}
         </h3>
-        <p className="mb-2 text-xs text-muted">{subtitle}</p>
-        <div className="h-56 min-h-0 flex-1 md:h-auto">{children}</div>
+        <p className="mb-4 text-xs text-muted">{subtitle}</p>
+        <div className="h-64">{children}</div>
       </div>
     </div>
   );
