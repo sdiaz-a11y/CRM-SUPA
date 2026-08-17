@@ -341,7 +341,7 @@ function Dona({ datos, total }: { datos: { nombre: string; cantidad: number }[];
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2">
-      <div className="relative aspect-square h-full max-h-full">
+      <div className="relative aspect-square h-[68%] max-h-[68%]">
         <svg viewBox="0 0 160 160" className="h-full w-full -rotate-90">
           <circle cx={80} cy={80} r={R} fill="none" stroke="var(--surface-2)" strokeWidth={STROKE} />
           {segmentos.map((s, i) => {
@@ -369,13 +369,13 @@ function Dona({ datos, total }: { datos: { nombre: string; cantidad: number }[];
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
           {activo ? (
             <>
-              <span className="text-lg font-semibold text-foreground">{activo.cantidad.toLocaleString("es-MX")}</span>
-              <span className="text-[10px] text-muted">{activo.nombre}</span>
+              <span className="text-3xl font-bold text-foreground">{activo.cantidad.toLocaleString("es-MX")}</span>
+              <span className="text-xs text-muted">{activo.nombre}</span>
             </>
           ) : (
             <>
-              <span className="text-2xl font-semibold text-foreground">{pctActivos}%</span>
-              <span className="text-[10px] text-muted">activos</span>
+              <span className="text-4xl font-bold text-foreground">{pctActivos}%</span>
+              <span className="text-xs text-muted">activos</span>
             </>
           )}
         </div>
