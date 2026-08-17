@@ -25,6 +25,25 @@ type Resumen = {
 
 const COLORES_DONA = ["#ef4444", "#10b981", "#0a5cff", "#f59e0b", "#8b5cf6", "#5b6472"];
 
+// Mide el tamaño real (en px) del contenedor para dibujar el SVG exactamente
+// a esa medida — así el viewBox nunca tiene que estirarse/aplastarse para
+// llenar la tarjeta (que es lo que deformaba texto y puntos antes).
+function useTamanoContenedor<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [tam, setTam] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setTam({ w: Math.round(width), h: Math.round(height) });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, tam] as const;
+}
+
 export default function DashboardPage() {
   const [resumen, setResumen] = useState<Resumen | null>(null);
 
@@ -171,10 +190,10 @@ function Kpi({
   );
 }
 
-// Rellena exactamente el contenedor (preserveAspectRatio="none") para poder
-// fijar la altura desde afuera con flex/grid — el precio es que los puntos
-// (círculos) se estiran levemente si el contenedor no guarda la proporción
-// 640:200 del viewBox, algo casi imperceptible a este tamaño.
+// El SVG se dibuja a la medida real del contenedor (medida con
+// ResizeObserver) en vez de forzar un viewBox fijo a estirarse — así 1
+// unidad del viewBox siempre es 1px real y nada se deforma, sea cual sea el
+// tamaño final de la tarjeta.
 function LineChart({
   datos,
   color = "#0a5cff",
@@ -182,13 +201,16 @@ function LineChart({
   datos: { mes: string; cantidad: number }[];
   color?: string;
 }) {
-  const W = 640;
-  const H = 200;
-  const PAD_L = 40;
-  const PAD_B = 20;
-  const PAD_T = 10;
+  const [contRef, { w: W, h: H }] = useTamanoContenedor<HTMLDivElement>();
+  const listo = W > 0 && H > 0;
+
+  const PAD_L = 42;
+  const PAD_B = 22;
+  const PAD_T = 14;
+  const PAD_R = 12;
   const max = Math.max(1, ...datos.map((d) => d.cantidad));
-  const stepX = (W - PAD_L - 10) / Math.max(1, datos.length - 1);
+  const anchoUtil = Math.max(1, W - PAD_L - PAD_R);
+  const stepX = anchoUtil / Math.max(1, datos.length - 1);
 
   const puntos = datos.map((d, i) => {
     const x = PAD_L + i * stepX;
@@ -199,6 +221,10 @@ function LineChart({
   const linea = puntos.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
   const area = `${linea} L${puntos[puntos.length - 1]?.x ?? PAD_L},${H - PAD_B} L${PAD_L},${H - PAD_B} Z`;
   const gridY = [0, 0.25, 0.5, 0.75, 1];
+
+  // Cuántos meses saltarse entre etiquetas para que nunca queden pegadas:
+  // cada etiqueta necesita ~32px propios como mínimo.
+  const saltoEtiqueta = Math.max(1, Math.ceil((32 * (datos.length - 1)) / anchoUtil));
 
   const svgRef = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<number | null>(null);
@@ -223,60 +249,71 @@ function LineChart({
   const gradId = `areaFill-${color.replace("#", "")}`;
 
   return (
-    <div className="relative h-full w-full">
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${W} ${H}`}
-        preserveAspectRatio="none"
-        className="h-full w-full cursor-crosshair"
-        role="img"
-        aria-label="Gráfica de línea"
-        onMouseMove={onMove}
-        onMouseLeave={() => setHover(null)}
-      >
-        {gridY.map((g) => {
-          const y = PAD_T + g * (H - PAD_T - PAD_B);
-          return (
-            <g key={g}>
-              <line x1={PAD_L} y1={y} x2={W - 5} y2={y} stroke="var(--silver)" strokeWidth={1} />
-              <text x={PAD_L - 8} y={y + 3} textAnchor="end" fontSize={10} fill="var(--muted)">
-                {Math.round(max * (1 - g)).toLocaleString("es-MX")}
-              </text>
-            </g>
-          );
-        })}
-        <defs>
-          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.25} />
-            <stop offset="100%" stopColor={color} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <path d={area} fill={`url(#${gradId})`} />
-        <path d={linea} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
-        {activo && (
-          <line x1={activo.x} y1={PAD_T} x2={activo.x} y2={H - PAD_B} stroke="var(--silver)" strokeWidth={1} strokeDasharray="3,3" />
-        )}
-        {puntos.map((p, i) => (
-          <circle
-            key={i}
-            cx={p.x}
-            cy={p.y}
-            r={hover === i ? 5 : 3}
-            fill={hover === i ? color : "var(--surface)"}
-            stroke={color}
-            strokeWidth={2}
-          />
-        ))}
-        {puntos.map((p, i) => (
-          <text key={i} x={p.x} y={H - 4} textAnchor="middle" fontSize={10} fill={hover === i ? "var(--foreground)" : "var(--muted)"}>
-            {p.mes}
-          </text>
-        ))}
-      </svg>
+    <div ref={contRef} className="relative h-full w-full">
+      {listo && (
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${W} ${H}`}
+          className="h-full w-full cursor-crosshair"
+          role="img"
+          aria-label="Gráfica de línea"
+          onMouseMove={onMove}
+          onMouseLeave={() => setHover(null)}
+        >
+          {gridY.map((g) => {
+            const y = PAD_T + g * (H - PAD_T - PAD_B);
+            return (
+              <g key={g}>
+                <line x1={PAD_L} y1={y} x2={W - PAD_R} y2={y} stroke="var(--silver)" strokeWidth={1} />
+                <text x={PAD_L - 8} y={y + 3} textAnchor="end" fontSize={11} fill="var(--muted)">
+                  {Math.round(max * (1 - g)).toLocaleString("es-MX")}
+                </text>
+              </g>
+            );
+          })}
+          <defs>
+            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity={0.25} />
+              <stop offset="100%" stopColor={color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <path d={area} fill={`url(#${gradId})`} />
+          <path d={linea} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+          {activo && (
+            <line x1={activo.x} y1={PAD_T} x2={activo.x} y2={H - PAD_B} stroke="var(--silver)" strokeWidth={1} strokeDasharray="3,3" />
+          )}
+          {puntos.map((p, i) => (
+            <circle
+              key={i}
+              cx={p.x}
+              cy={p.y}
+              r={hover === i ? 5 : 3}
+              fill={hover === i ? color : "var(--surface)"}
+              stroke={color}
+              strokeWidth={2}
+            />
+          ))}
+          {puntos.map(
+            (p, i) =>
+              (i % saltoEtiqueta === 0 || i === puntos.length - 1) && (
+                <text
+                  key={i}
+                  x={p.x}
+                  y={H - 5}
+                  textAnchor="middle"
+                  fontSize={11}
+                  fill={hover === i ? "var(--foreground)" : "var(--muted)"}
+                >
+                  {p.mes}
+                </text>
+              )
+          )}
+        </svg>
+      )}
       {activo && (
         <div
           className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-[calc(100%+10px)] rounded-lg border border-silver bg-surface px-2.5 py-1.5 text-xs whitespace-nowrap shadow-lg"
-          style={{ left: `${(activo.x / W) * 100}%`, top: `${(activo.y / H) * 100}%` }}
+          style={{ left: activo.x, top: activo.y }}
         >
           <p className="font-semibold text-foreground">{activo.cantidad.toLocaleString("es-MX")}</p>
           <p className="text-[10px] text-muted">{activo.mes}</p>
@@ -369,7 +406,7 @@ function BarrasMembresia({ datos }: { datos: { nombre: string; cantidad: number 
   const max = Math.max(...datos.map((d) => d.cantidad));
   const total = datos.reduce((s, d) => s + d.cantidad, 0);
   return (
-    <ul className="flex h-full flex-col justify-center gap-2.5">
+    <ul className="flex h-full flex-col justify-center gap-2.5 overflow-y-auto">
       {datos.map((d, i) => (
         <li key={d.nombre} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} className="cursor-pointer">
           <div className="mb-1 flex items-center justify-between text-xs">

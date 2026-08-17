@@ -100,9 +100,10 @@ export async function GET() {
     return { mes: label, cantidad, acumulado };
   });
 
-  const topMembresias = Object.entries(membresias)
-    .sort((a, b) => b[1] - a[1])
-    .map(([nombre, cantidad]) => ({ nombre, cantidad }));
+  // Sin tope, esto puede traer decenas de valores distintos (años de CSV
+  // importado con texto libre) — la tarjeta del dashboard solo tiene lugar
+  // para unas pocas barras legibles.
+  const topMembresias = agruparTopMasOtros(membresias, 5);
 
   const resumen = {
     totalClientes: clientes.length,
