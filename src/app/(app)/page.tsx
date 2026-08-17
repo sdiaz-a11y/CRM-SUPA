@@ -62,20 +62,47 @@ export default function DashboardPage() {
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-muted">
           Análisis visual <span className="normal-case tracking-normal text-muted/70">(pasa el cursor para ver detalle)</span>
         </p>
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 md:grid-cols-2 md:grid-rows-2">
-          <ChartCard icon={TrendingUp} iconTone="text-primary" title="Inscripciones por mes" subtitle="Últimos 12 meses · altas en plataforma">
+        {/* Asimétrico a propósito: las líneas necesitan ancho para los 12
+            meses, la dona es naturalmente compacta/circular (mejor en una
+            columna angosta y alta que en una tarjeta cuadrada), y "Top
+            Membresías"/"Crecimiento" casi nunca piden tanto espacio como la
+            gráfica principal. */}
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 md:grid-cols-[2fr_2fr_1.3fr] md:grid-rows-2">
+          <ChartCard
+            icon={TrendingUp}
+            iconTone="text-primary"
+            title="Inscripciones por mes"
+            subtitle="Últimos 12 meses · altas en plataforma"
+            className="md:col-start-1 md:row-start-1 md:col-span-2"
+          >
             {resumen ? <LineChart datos={resumen.inscripcionesPorMes} /> : <Cargando />}
           </ChartCard>
 
-          <ChartCard title="Acceso a Plataforma" subtitle="Distribución de acceso activo">
+          <ChartCard
+            title="Acceso a Plataforma"
+            subtitle="Distribución de acceso activo"
+            className="md:col-start-3 md:row-start-1 md:row-span-2"
+          >
             {resumen ? <Dona datos={resumen.distribucionAcceso} total={resumen.totalClientes} /> : <Cargando />}
           </ChartCard>
 
-          <ChartCard icon={GraduationCap} iconTone="text-primary" title="Top Membresías Skool" subtitle="Por número de registros">
+          <ChartCard
+            icon={GraduationCap}
+            iconTone="text-primary"
+            title="Top Membresías Skool"
+            subtitle="Por número de registros"
+            className="md:col-start-1 md:row-start-2"
+          >
             {resumen ? <BarrasMembresia datos={resumen.topMembresias} /> : <Cargando />}
           </ChartCard>
 
-          <ChartCard icon={TrendingUp} iconTone="text-success" title="Crecimiento acumulado" subtitle="Total de contactos registrados en el tiempo">
+          <ChartCard
+            icon={TrendingUp}
+            iconTone="text-success"
+            title="Crecimiento acumulado"
+            subtitle="Total de contactos registrados en el tiempo"
+            className="md:col-start-2 md:row-start-2"
+          >
             {resumen ? (
               <LineChart
                 datos={resumen.inscripcionesPorMes.map((d) => ({ mes: d.mes, cantidad: d.acumulado }))}
@@ -100,16 +127,18 @@ function ChartCard({
   iconTone = "text-primary",
   title,
   subtitle,
+  className = "",
   children,
 }: {
   icon?: typeof TrendingUp;
   iconTone?: string;
   title: string;
   subtitle: string;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="shell flex min-h-0 flex-col rounded-[2rem] p-2 diffused-lg">
+    <div className={`shell flex min-h-0 flex-col rounded-[2rem] p-2 diffused-lg ${className}`}>
       <div className="core flex min-h-0 flex-1 flex-col rounded-[calc(2rem-0.5rem)] p-4 md:p-5">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
           {Icon && <Icon className={`h-4 w-4 ${iconTone}`} strokeWidth={1.75} />}
