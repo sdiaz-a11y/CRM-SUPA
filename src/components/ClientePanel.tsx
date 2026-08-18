@@ -194,6 +194,15 @@ export function ClientePanel({
       .catch(() => setTagsCatalogo([]));
   }, []);
 
+  // Ref (no dep de efecto) para poder llamar la versión más reciente de
+  // onClienteActualizado desde el efecto de carga sin que ese efecto se
+  // vuelva a disparar cada vez que ClientesPage se re-renderiza (su versión
+  // de la función no está memoizada con useCallback).
+  const onClienteActualizadoRef = useRef(onClienteActualizado);
+  useEffect(() => {
+    onClienteActualizadoRef.current = onClienteActualizado;
+  }, [onClienteActualizado]);
+
   const clienteIdRef = useRef(clienteId);
   useEffect(() => {
     clienteIdRef.current = clienteId;
@@ -222,6 +231,12 @@ export function ClientePanel({
       setEventos(eventosRes.eventos ?? []);
       setForm(formDeCliente(clienteRes.cliente));
       setCargando(false);
+      // La fila de la lista se queda con la foto de cuando se cargó (o de
+      // cuando se creó el cliente) — si algo cambió desde entonces en
+      // segundo plano (ej. el webhook real de confirmación de WhatsApp),
+      // esta es la única forma de que la lista se entere sin recargar toda
+      // la página.
+      onClienteActualizadoRef.current(clienteRes.cliente);
     });
     fetch(`/api/clientes/${encodeURIComponent(clienteId)}/kajabi-estado`)
       .then((r) => r.json())
