@@ -27,6 +27,9 @@ export const PERMISOS = {
   importarCsv: ["admin"],
   gestionarCatalogo: ["admin"],
   gestionarUsuarios: ["admin"],
+  verOtrasOfertas: ["admin", "coordinador", "abeja"], // igual criterio que verClientes
+  importarOtrasOfertas: ["admin"], // igual criterio que importarCsv
+  otorgarOferta: ["admin"], // Club: "Agregar oferta" en el panel + oferta opcional en la alta
 } as const satisfies Record<string, readonly Rol[]>;
 
 export type Accion = keyof typeof PERMISOS;

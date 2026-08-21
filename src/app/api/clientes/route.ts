@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Nombre y correo son obligatorios" }, { status: 400 });
   }
   try {
-    const { cliente, avisoKajabi, avisoSkool, avisoGhl } = await altaCompletaCliente(
+    const { cliente, avisoKajabi, avisoSkool, avisoGhl, avisoOfertaAdicional } = await altaCompletaCliente(
       {
         nombre: body.nombre,
         email: body.email,
@@ -53,11 +53,13 @@ export async function POST(req: NextRequest) {
         evento: body.evento,
         tipoMembresia: body.tipoMembresia,
         etiqueta: body.etiqueta,
+        ofertaAdicionalId: body.ofertaAdicionalId,
+        ofertaAdicionalTitulo: body.ofertaAdicionalTitulo,
       },
       permiso.usuario.nombre
     );
 
-    return NextResponse.json({ cliente, avisoKajabi, avisoSkool, avisoGhl });
+    return NextResponse.json({ cliente, avisoKajabi, avisoSkool, avisoGhl, avisoOfertaAdicional });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido";
     return NextResponse.json({ error: message }, { status: 400 });

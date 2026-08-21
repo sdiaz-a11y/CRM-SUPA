@@ -3,7 +3,16 @@ import { calcularVencimientoSkool, formatearFechaSkool, parsearFechaSkool } from
 import { cargarInventarioBoletos, cargarPaisPorEvento, calcularAccesos, regionDeCliente } from "./boletos";
 import { obtenerPerfilKajabi } from "./kajabi";
 import { filaACliente, fechaSkoolADateOnly, type ClienteRow } from "./supabase-map";
-import type { Accesos, Cliente, EstadoMensajeBienvenidaWa, EventoTimeline, TipoEvento, Variante } from "./types";
+import type {
+  Accesos,
+  Cliente,
+  EstadoMensajeBienvenidaWa,
+  EventoTimeline,
+  OfertaOtorgada,
+  OtraOfertaCliente,
+  TipoEvento,
+  Variante,
+} from "./types";
 
 const PAGINA_INTERNA = 1000;
 
@@ -559,7 +568,7 @@ export async function marcarInvitacionSkoolEnviada(id: string, fechaAncla?: stri
   return filaACliente(data as ClienteRow);
 }
 
-function finDeAccesoDentroDeUnAnio(): string {
+export function finDeAccesoDentroDeUnAnio(): string {
   const ahora = new Date();
   return new Date(Date.UTC(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() + 365)).toISOString();
 }
@@ -1074,4 +1083,254 @@ export async function listarEliminados(busqueda?: string): Promise<Cliente[]> {
   const { data, error } = await query;
   if (error) throw error;
   return (data as ClienteRow[]).map(filaACliente);
+}
+
+// --- "Otras Ofertas": roster independiente de Clientes (Club Sinergético).
+// Ver el comentario junto a la tabla en supabase/schema.sql sobre por qué es
+// una tabla aparte en vez de reusar `clientes`. ---
+
+type OtraOfertaClienteRow = {
+  id: string;
+  nombre: string;
+  email: string;
+  telefono: string | null;
+  tags: string[];
+  etiqueta: string | null;
+  orden_csv: number;
+  kajabi_contact_id: string | null;
+  creado_en: string;
+  actualizado_en: string;
+};
+
+function filaAOtraOfertaCliente(r: OtraOfertaClienteRow): OtraOfertaCliente {
+  return {
+    id: r.id,
+    nombre: r.nombre,
+    email: r.email,
+    telefono: r.telefono,
+    tags: r.tags ?? [],
+    etiqueta: r.etiqueta,
+    ordenCsv: r.orden_csv,
+    kajabiContactId: r.kajabi_contact_id,
+    creadoEn: r.creado_en,
+    actualizadoEn: r.actualizado_en,
+  };
+}
+
+type OfertaOtorgadaRow = {
+  id: string;
+  cliente_id: string;
+  oferta_id: string;
+  oferta_titulo: string;
+  fecha_otorgada: string;
+  fin_acceso: string;
+  otorgado_por: string;
+  revocado_en: string | null;
+  revocado_por: string | null;
+};
+
+function filaAOfertaOtorgada(r: OfertaOtorgadaRow): OfertaOtorgada {
+  return {
+    id: r.id,
+    clienteId: r.cliente_id,
+    ofertaId: r.oferta_id,
+    ofertaTitulo: r.oferta_titulo,
+    fechaOtorgada: r.fecha_otorgada,
+    finAcceso: r.fin_acceso,
+    otorgadoPor: r.otorgado_por,
+    revocadoEn: r.revocado_en,
+    revocadoPor: r.revocado_por,
+  };
+}
+
+export type FiltrosOtrasOfertas = {
+  busqueda?: string;
+  etiqueta?: string;
+  tag?: string;
+  limite?: number;
+  pagina?: number;
+};
+
+export async function listarOtrasOfertasClientes(opciones?: FiltrosOtrasOfertas): Promise<{
+  clientes: OtraOfertaCliente[];
+  total: number;
+}> {
+  const limite = opciones?.limite ?? 100;
+  const pagina = Math.max(1, opciones?.pagina ?? 1);
+  const inicio = (pagina - 1) * limite;
+
+  let query = supabase.from("otras_ofertas_clientes").select("*", { count: "exact" });
+  const q = sanearBusqueda(opciones?.busqueda?.trim() ?? "");
+  if (q) query = query.or(`nombre.ilike.%${q}%,email.ilike.%${q}%`);
+  if (opciones?.etiqueta) query = query.eq("etiqueta", opciones.etiqueta);
+  if (opciones?.tag) query = query.contains("tags", [opciones.tag]);
+  query = query.order("orden_csv", { ascending: false }).range(inicio, inicio + limite - 1);
+
+  const { data, error, count } = await query;
+  if (error) throw error;
+  return { clientes: (data as OtraOfertaClienteRow[]).map(filaAOtraOfertaCliente), total: count ?? 0 };
+}
+
+const CAP_EXPORTACION_OTRAS_OFERTAS = 50_000;
+
+// Mismo criterio que exportarClientes: trae todo lo que matchee sin paginar,
+// para el botón "Descargar CSV".
+export async function exportarOtrasOfertasClientes(opciones?: FiltrosOtrasOfertas): Promise<OtraOfertaCliente[]> {
+  const filas = await traerTodo<OtraOfertaClienteRow>((from, to) => {
+    let query = supabase.from("otras_ofertas_clientes").select("*");
+    const q = sanearBusqueda(opciones?.busqueda?.trim() ?? "");
+    if (q) query = query.or(`nombre.ilike.%${q}%,email.ilike.%${q}%`);
+    if (opciones?.etiqueta) query = query.eq("etiqueta", opciones.etiqueta);
+    if (opciones?.tag) query = query.contains("tags", [opciones.tag]);
+    return query.order("orden_csv", { ascending: false }).range(from, to);
+  });
+  if (filas.length > CAP_EXPORTACION_OTRAS_OFERTAS) {
+    throw new Error("Demasiados resultados para exportar — aplica filtros para reducir la lista.");
+  }
+  return filas.map(filaAOtraOfertaCliente);
+}
+
+export async function obtenerOtraOfertaCliente(id: string): Promise<OtraOfertaCliente | null> {
+  const { data, error } = await supabase.from("otras_ofertas_clientes").select("*").eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data ? filaAOtraOfertaCliente(data as OtraOfertaClienteRow) : null;
+}
+
+export async function listarOfertasOtorgadas(clienteId: string): Promise<OfertaOtorgada[]> {
+  const { data, error } = await supabase
+    .from("otras_ofertas_otorgadas")
+    .select("*")
+    .eq("cliente_id", clienteId)
+    .order("fecha_otorgada", { ascending: false });
+  if (error) throw error;
+  return (data as OfertaOtorgadaRow[]).map(filaAOfertaOtorgada);
+}
+
+// Encuentra o crea la identidad del roster de Otras Ofertas por correo — a
+// diferencia de crearCliente, NUNCA tira error si ya existe: la misma
+// persona puede reimportarse más adelante con una oferta distinta (cada
+// oferta otorgada se registra aparte, ver registrarOfertaOtorgada). Tags se
+// unen (nunca se pierde uno ya asignado); etiqueta y teléfono solo se pisan
+// si el nuevo import trae un valor — si no, se conserva el que ya había.
+export async function upsertOtraOfertaClienteIdentidad(input: {
+  nombre: string;
+  email: string;
+  telefono?: string | null;
+  tags?: string[];
+  etiqueta?: string | null;
+}): Promise<OtraOfertaCliente> {
+  const id = normalizarEmail(input.email);
+  const { data: existenteRaw } = await supabase.from("otras_ofertas_clientes").select("*").eq("id", id).maybeSingle();
+  const existente = existenteRaw as OtraOfertaClienteRow | null;
+
+  const tagsNuevos = input.tags ?? [];
+  const tagsFinales = existente ? Array.from(new Set([...(existente.tags ?? []), ...tagsNuevos])) : tagsNuevos;
+
+  const { data, error } = await supabase
+    .from("otras_ofertas_clientes")
+    .upsert(
+      {
+        id,
+        nombre: input.nombre.trim(),
+        email: id,
+        telefono: normalizarTelefono(input.telefono) ?? existente?.telefono ?? null,
+        tags: tagsFinales,
+        etiqueta: input.etiqueta?.trim() || existente?.etiqueta || null,
+        orden_csv: Date.now(),
+        actualizado_en: new Date().toISOString(),
+      },
+      { onConflict: "id" }
+    )
+    .select("*")
+    .single();
+  if (error) throw error;
+  return filaAOtraOfertaCliente(data as OtraOfertaClienteRow);
+}
+
+export async function registrarOfertaOtorgada(
+  clienteId: string,
+  ofertaId: string,
+  ofertaTitulo: string,
+  autor: string
+): Promise<OfertaOtorgada> {
+  const { data, error } = await supabase
+    .from("otras_ofertas_otorgadas")
+    .insert({
+      cliente_id: clienteId,
+      oferta_id: ofertaId,
+      oferta_titulo: ofertaTitulo,
+      fin_acceso: finDeAccesoDentroDeUnAnio(),
+      otorgado_por: autor,
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return filaAOfertaOtorgada(data as OfertaOtorgadaRow);
+}
+
+export async function revocarOfertaOtorgada(grantId: string, autor: string): Promise<OfertaOtorgada> {
+  const { data, error } = await supabase
+    .from("otras_ofertas_otorgadas")
+    .update({ revocado_en: new Date().toISOString(), revocado_por: autor })
+    .eq("id", grantId)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return filaAOfertaOtorgada(data as OfertaOtorgadaRow);
+}
+
+export async function vincularKajabiContactIdOtraOferta(id: string, kajabiContactId: string): Promise<void> {
+  const { error } = await supabase.from("otras_ofertas_clientes").update({ kajabi_contact_id: kajabiContactId }).eq("id", id);
+  if (error) throw error;
+}
+
+// --- Ofertas EXTRA (no la del Club) para un cliente del Club Sinergético ya
+// existente — se otorgan desde su panel o su alta, y se guardan aparte del
+// roster de Otras Ofertas (FK a `clientes`, no a `otras_ofertas_clientes`). ---
+
+export async function listarOfertasClienteClub(clienteId: string): Promise<OfertaOtorgada[]> {
+  const { data, error } = await supabase
+    .from("clientes_ofertas")
+    .select("*")
+    .eq("cliente_id", clienteId)
+    .order("fecha_otorgada", { ascending: false });
+  if (error) throw error;
+  return (data as OfertaOtorgadaRow[]).map(filaAOfertaOtorgada);
+}
+
+export async function registrarOfertaClienteClub(
+  clienteId: string,
+  ofertaId: string,
+  ofertaTitulo: string,
+  autor: string
+): Promise<OfertaOtorgada> {
+  const { data, error } = await supabase
+    .from("clientes_ofertas")
+    .insert({
+      cliente_id: clienteId,
+      oferta_id: ofertaId,
+      oferta_titulo: ofertaTitulo,
+      fin_acceso: finDeAccesoDentroDeUnAnio(),
+      otorgado_por: autor,
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+
+  await registrarEvento(clienteId, "OFERTA_OTORGADA", `Oferta adicional otorgada: "${ofertaTitulo}"`, autor);
+  return filaAOfertaOtorgada(data as OfertaOtorgadaRow);
+}
+
+export async function revocarOfertaClienteClub(grantId: string, autor: string): Promise<OfertaOtorgada> {
+  const { data, error } = await supabase
+    .from("clientes_ofertas")
+    .update({ revocado_en: new Date().toISOString(), revocado_por: autor })
+    .eq("id", grantId)
+    .select("*")
+    .single();
+  if (error) throw error;
+
+  const oferta = filaAOfertaOtorgada(data as OfertaOtorgadaRow);
+  await registrarEvento(oferta.clienteId, "OFERTA_REVOCADA", `Oferta adicional revocada: "${oferta.ofertaTitulo}"`, autor);
+  return oferta;
 }

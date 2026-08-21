@@ -38,13 +38,15 @@ import {
   Mail,
   PauseCircle,
   PlayCircle,
+  Gift,
 } from "lucide-react";
-import type { Accesos, Cliente, EventoTimeline } from "@/lib/types";
+import type { Accesos, Cliente, EventoTimeline, OfertaOtorgada } from "@/lib/types";
 import { ESTADOS_MENSAJE_BIENVENIDA_WA } from "@/lib/types";
 import { useSesion } from "@/lib/session-context";
 import { tienePermiso } from "@/lib/permisos";
 import { AccesosSynergy } from "./AccesosSynergy";
 import { Timeline } from "./Timeline";
+import { ComboboxBuscador, type OpcionCombobox } from "./ComboboxBuscador";
 import type { PerfilKajabi } from "@/lib/kajabi";
 
 type Tab = "resumen" | "accesos" | "seguimiento" | "notas" | "actividad" | "kajabi";
@@ -176,6 +178,15 @@ export function ClientePanel({
   const [cargandoPerfilKajabi, setCargandoPerfilKajabi] = useState(false);
   const [errorPerfilKajabi, setErrorPerfilKajabi] = useState<string | null>(null);
   const [intentadoPerfilKajabi, setIntentadoPerfilKajabi] = useState(false);
+  const puedeOtorgarOferta = !!usuario && tienePermiso(usuario.rol, "otorgarOferta");
+  const [ofertasClub, setOfertasClub] = useState<OfertaOtorgada[]>([]);
+  const [catalogoOfertasKajabi, setCatalogoOfertasKajabi] = useState<OpcionCombobox[]>([]);
+  const [cargandoCatalogoOfertas, setCargandoCatalogoOfertas] = useState(false);
+  const [mostrarAgregarOferta, setMostrarAgregarOferta] = useState(false);
+  const [ofertaElegida, setOfertaElegida] = useState("");
+  const [otorgandoOferta, setOtorgandoOferta] = useState(false);
+  const [confirmandoRevocarId, setConfirmandoRevocarId] = useState<string | null>(null);
+  const [revocandoOfertaId, setRevocandoOfertaId] = useState<string | null>(null);
 
   const mostrandoEnviandoWa = enviandoWa || esperandoConfirmacionWa;
   useEffect(() => {
@@ -222,13 +233,19 @@ export function ClientePanel({
     setPerfilKajabi(null);
     setErrorPerfilKajabi(null);
     setIntentadoPerfilKajabi(false);
+    setOfertasClub([]);
+    setMostrarAgregarOferta(false);
+    setOfertaElegida("");
+    setConfirmandoRevocarId(null);
     Promise.all([
       fetch(`/api/clientes/${encodeURIComponent(clienteId)}`).then((r) => r.json()),
       fetch(`/api/clientes/${encodeURIComponent(clienteId)}/eventos`).then((r) => r.json()),
-    ]).then(([clienteRes, eventosRes]) => {
+      fetch(`/api/clientes/${encodeURIComponent(clienteId)}/ofertas`).then((r) => r.json()),
+    ]).then(([clienteRes, eventosRes, ofertasRes]) => {
       if (cancelado) return;
       setCliente(clienteRes.cliente);
       setEventos(eventosRes.eventos ?? []);
+      setOfertasClub(ofertasRes.ofertas ?? []);
       setForm(formDeCliente(clienteRes.cliente));
       setCargando(false);
       // La fila de la lista se queda con la foto de cuando se cargó (o de
@@ -458,6 +475,70 @@ export function ClientePanel({
     const eventosRes = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/eventos`).then((r) =>
       r.json()
     );
+    setEventos(eventosRes.eventos ?? []);
+  }
+
+  function abrirAgregarOferta() {
+    if (!puedeOtorgarOferta) return;
+    setMostrarAgregarOferta(true);
+    setOfertaElegida("");
+    if (catalogoOfertasKajabi.length > 0) return;
+    setCargandoCatalogoOfertas(true);
+    fetch("/api/kajabi/ofertas")
+      .then((r) => r.json())
+      .then((data) => {
+        const ofertas: { id: string; titulo: string }[] = data.ofertas ?? [];
+        setCatalogoOfertasKajabi(ofertas.map((o) => ({ valor: o.id, etiqueta: o.titulo })));
+      })
+      .catch(() => setError("No se pudo consultar el catálogo de ofertas de Kajabi"))
+      .finally(() => setCargandoCatalogoOfertas(false));
+  }
+
+  async function confirmarAgregarOferta() {
+    if (!cliente || !puedeOtorgarOferta || !ofertaElegida) return;
+    const ofertaTitulo = catalogoOfertasKajabi.find((o) => o.valor === ofertaElegida)?.etiqueta ?? ofertaElegida;
+    setOtorgandoOferta(true);
+    setError(null);
+    const res = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/otorgar-oferta`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ofertaId: ofertaElegida, ofertaTitulo }),
+    });
+    const data = await res.json();
+    setOtorgandoOferta(false);
+    if (!res.ok) {
+      window.alert(`No se pudo otorgar la oferta: ${data.error ?? "error desconocido"}`);
+      return;
+    }
+    setOfertasClub(data.ofertas ?? []);
+    setMostrarAgregarOferta(false);
+    setOfertaElegida("");
+    const eventosRes = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/eventos`).then((r) => r.json());
+    setEventos(eventosRes.eventos ?? []);
+  }
+
+  async function confirmarRevocarOferta(grantId: string) {
+    if (!cliente || !puedeOtorgarOferta) return;
+    if (confirmandoRevocarId !== grantId) {
+      setConfirmandoRevocarId(grantId);
+      return;
+    }
+    setRevocandoOfertaId(grantId);
+    setError(null);
+    const res = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/revocar-oferta`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ofertaGrantId: grantId }),
+    });
+    const data = await res.json();
+    setRevocandoOfertaId(null);
+    setConfirmandoRevocarId(null);
+    if (!res.ok) {
+      window.alert(`No se pudo revocar la oferta: ${data.error ?? "error desconocido"}`);
+      return;
+    }
+    setOfertasClub(data.ofertas ?? []);
+    const eventosRes = await fetch(`/api/clientes/${encodeURIComponent(cliente.id)}/eventos`).then((r) => r.json());
     setEventos(eventosRes.eventos ?? []);
   }
 
@@ -1187,6 +1268,105 @@ export function ClientePanel({
                       </div>
                     )}
                       </>
+                    )}
+                  </Tarjeta>
+
+                  <Tarjeta titulo="Otras ofertas">
+                    {ofertasClub.length === 0 && !mostrarAgregarOferta && (
+                      <p className="text-sm text-muted">
+                        Este cliente no tiene ninguna oferta adicional a la del Club.
+                      </p>
+                    )}
+                    {ofertasClub.length > 0 && (
+                      <ul className="mb-3 space-y-2">
+                        {ofertasClub.map((o) => (
+                          <li
+                            key={o.id}
+                            className="flex items-center justify-between gap-2 rounded-lg border border-silver px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="flex items-center gap-1.5 truncate text-sm text-foreground">
+                                <Gift
+                                  className={`h-3.5 w-3.5 flex-none ${o.revocadoEn ? "text-muted" : "text-success"}`}
+                                  strokeWidth={1.75}
+                                />
+                                {o.ofertaTitulo}
+                              </p>
+                              <p className="text-xs text-muted">
+                                Otorgada el {new Date(o.fechaOtorgada).toLocaleDateString("es-MX")} por {o.otorgadoPor}
+                                {o.revocadoEn &&
+                                  ` — revocada el ${new Date(o.revocadoEn).toLocaleDateString("es-MX")} por ${o.revocadoPor}`}
+                              </p>
+                            </div>
+                            {puedeOtorgarOferta && !o.revocadoEn && (
+                              <>
+                                {confirmandoRevocarId === o.id ? (
+                                  <div className="flex flex-none items-center gap-1.5">
+                                    <button
+                                      onClick={() => setConfirmandoRevocarId(null)}
+                                      className="ease-spring rounded-lg border border-silver px-2 py-1 text-xs font-medium text-muted transition hover:text-foreground"
+                                    >
+                                      Cancelar
+                                    </button>
+                                    <button
+                                      onClick={() => confirmarRevocarOferta(o.id)}
+                                      disabled={revocandoOfertaId === o.id}
+                                      className="ease-spring rounded-lg bg-danger px-2 py-1 text-xs font-medium text-white transition disabled:opacity-50"
+                                    >
+                                      {revocandoOfertaId === o.id ? "Revocando…" : "Sí, revocar"}
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => confirmarRevocarOferta(o.id)}
+                                    className="ease-spring flex-none rounded-lg border border-silver px-2 py-1 text-xs font-medium text-muted transition hover:bg-surface-2 hover:text-foreground"
+                                  >
+                                    Revocar
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {puedeOtorgarOferta && !mostrarAgregarOferta && (
+                      <button
+                        onClick={abrirAgregarOferta}
+                        className="ease-spring flex items-center gap-1.5 rounded-lg border border-silver px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-surface-2"
+                      >
+                        <Gift className="h-3.5 w-3.5" strokeWidth={1.75} />
+                        Agregar oferta
+                      </button>
+                    )}
+
+                    {mostrarAgregarOferta && (
+                      <div className="rounded-lg border border-primary/30 bg-primary-dim/40 p-3">
+                        <p className="mb-2 text-xs font-medium text-muted">Elegir oferta de Kajabi</p>
+                        <ComboboxBuscador
+                          opciones={catalogoOfertasKajabi}
+                          valor={ofertaElegida}
+                          onChange={setOfertaElegida}
+                          placeholder={cargandoCatalogoOfertas ? "Cargando ofertas…" : "Seleccionar oferta…"}
+                          disabled={cargandoCatalogoOfertas}
+                        />
+                        <div className="mt-2.5 flex gap-2">
+                          <button
+                            onClick={() => setMostrarAgregarOferta(false)}
+                            className="ease-spring rounded-lg border border-silver px-3 py-1.5 text-xs font-medium text-muted transition hover:text-foreground"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={confirmarAgregarOferta}
+                            disabled={!ofertaElegida || otorgandoOferta}
+                            className="ease-spring rounded-lg brand-plate px-3 py-1.5 text-xs font-medium text-white transition disabled:opacity-50"
+                          >
+                            {otorgandoOferta ? "Otorgando…" : "Otorgar oferta"}
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </Tarjeta>
 

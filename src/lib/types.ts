@@ -86,7 +86,9 @@ export type TipoEvento =
   | "WA_BIENVENIDA"
   | "IMPORTACION"
   | "KAJABI"
-  | "ELIMINADO";
+  | "ELIMINADO"
+  | "OFERTA_OTORGADA"
+  | "OFERTA_REVOCADA";
 
 // Tipos "activos": los que el buscador de Actividad ofrece para filtrar. Los
 // marcados como legado arriba solo existen en eventos viejos ya guardados —
@@ -105,6 +107,8 @@ export const TIPOS_EVENTO_FILTRABLES: TipoEvento[] = [
   "IMPORTACION",
   "KAJABI",
   "ELIMINADO",
+  "OFERTA_OTORGADA",
+  "OFERTA_REVOCADA",
 ];
 
 export type EventoTimeline = {
@@ -135,6 +139,8 @@ export const TIPO_EVENTO_LABEL: Record<TipoEvento, string> = {
   IMPORTACION: "Importado",
   KAJABI: "Kajabi",
   ELIMINADO: "Cliente eliminado",
+  OFERTA_OTORGADA: "Oferta adicional otorgada",
+  OFERTA_REVOCADA: "Oferta adicional revocada",
 };
 
 export type Db = {
@@ -173,4 +179,36 @@ export type SolicitudCliente = {
   revisadoEn: string | null;
   clienteId: string | null;
   creadoEn: string;
+};
+
+// "Otras Ofertas": roster independiente de Clientes (Club Sinergético). Ver
+// tabla otras_ofertas_clientes — un registro por persona identificada por
+// correo, en su propio espacio de ids (no se cruza con clientes.id).
+export type OtraOfertaCliente = {
+  id: string;
+  nombre: string;
+  email: string;
+  telefono: string | null;
+  tags: string[];
+  etiqueta: string | null;
+  ordenCsv: number;
+  kajabiContactId: string | null;
+  creadoEn: string;
+  actualizadoEn: string;
+};
+
+// Una oferta otorgada, fechada — usado tanto por otras_ofertas_otorgadas
+// (roster de Otras Ofertas) como por clientes_ofertas (ofertas extra de un
+// cliente del Club). revocadoEn/revocadoPor quedan null mientras la oferta
+// sigue activa.
+export type OfertaOtorgada = {
+  id: string;
+  clienteId: string;
+  ofertaId: string;
+  ofertaTitulo: string;
+  fechaOtorgada: string;
+  finAcceso: string;
+  otorgadoPor: string;
+  revocadoEn: string | null;
+  revocadoPor: string | null;
 };

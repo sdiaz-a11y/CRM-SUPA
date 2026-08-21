@@ -281,3 +281,59 @@ create table if not exists solicitudes_cliente (
 create index if not exists idx_solicitudes_estado on solicitudes_cliente (estado, creado_en desc);
 create index if not exists idx_solicitudes_solicitado_por on solicitudes_cliente (solicitado_por_id);
 alter table solicitudes_cliente enable row level security;
+
+-- "Otras Ofertas": roster independiente de clientes (Club Sinergético). Un
+-- registro por persona (correo normalizado como id) — mismo criterio que
+-- clientes.id, pero en su propio espacio: la misma persona puede existir en
+-- ambas tablas como registros no relacionados, a propósito (no se mezclan
+-- las listas del Club y de otras ofertas).
+create table if not exists otras_ofertas_clientes (
+  id text primary key, -- correo normalizado (lowercase, trim)
+  nombre text not null,
+  email text not null,
+  telefono text,
+  tags jsonb not null default '[]'::jsonb,
+  etiqueta text,
+  orden_csv bigint not null default 0,
+  kajabi_contact_id text,
+  creado_en timestamptz not null default now(),
+  actualizado_en timestamptz not null default now()
+);
+create index if not exists idx_otras_ofertas_clientes_orden_csv on otras_ofertas_clientes (orden_csv desc);
+create index if not exists idx_otras_ofertas_clientes_nombre_trgm on otras_ofertas_clientes using gin (nombre gin_trgm_ops);
+create index if not exists idx_otras_ofertas_clientes_email_trgm on otras_ofertas_clientes using gin (email gin_trgm_ops);
+alter table otras_ofertas_clientes enable row level security;
+
+-- Historial de ofertas otorgadas a un registro de otras_ofertas_clientes,
+-- fechado. Reimportar a la misma persona con otra oferta NUNCA pisa una fila
+-- anterior — siempre agrega una nueva, para saber cuándo se otorgó cada una.
+create table if not exists otras_ofertas_otorgadas (
+  id uuid primary key default gen_random_uuid(),
+  cliente_id text not null references otras_ofertas_clientes (id) on delete cascade,
+  oferta_id text not null,
+  oferta_titulo text not null,
+  fecha_otorgada timestamptz not null default now(),
+  fin_acceso timestamptz not null, -- fecha_otorgada + 365 días
+  otorgado_por text not null,
+  revocado_en timestamptz, -- null = sigue activa; se puede revocar desde el detalle del cliente
+  revocado_por text
+);
+create index if not exists idx_otras_ofertas_otorgadas_cliente_id on otras_ofertas_otorgadas (cliente_id, fecha_otorgada desc);
+alter table otras_ofertas_otorgadas enable row level security;
+
+-- Ofertas EXTRA (no la del Club) otorgadas a un cliente del Club Sinergético
+-- ya existente, desde su panel o su alta. FK a `clientes`, no a
+-- otras_ofertas_clientes — son dos rosters completamente distintos.
+create table if not exists clientes_ofertas (
+  id uuid primary key default gen_random_uuid(),
+  cliente_id text not null references clientes (id) on delete cascade,
+  oferta_id text not null,
+  oferta_titulo text not null,
+  fecha_otorgada timestamptz not null default now(),
+  fin_acceso timestamptz not null,
+  otorgado_por text not null,
+  revocado_en timestamptz, -- null = sigue activa; se puede revocar desde el panel del cliente
+  revocado_por text
+);
+create index if not exists idx_clientes_ofertas_cliente_id on clientes_ofertas (cliente_id, fecha_otorgada desc);
+alter table clientes_ofertas enable row level security;

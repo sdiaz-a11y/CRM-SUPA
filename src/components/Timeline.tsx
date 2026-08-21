@@ -13,6 +13,8 @@ import {
   PlayCircle,
   RefreshCw,
   MessageCircle,
+  Gift,
+  XCircle,
 } from "lucide-react";
 import { TIPO_EVENTO_LABEL, type EventoTimeline, type TipoEvento } from "@/lib/types";
 
@@ -33,6 +35,8 @@ const ICONS: Record<TipoEvento, typeof UserPlus> = {
   IMPORTACION: UploadCloud,
   KAJABI: Tag,
   ELIMINADO: Trash2,
+  OFERTA_OTORGADA: Gift,
+  OFERTA_REVOCADA: XCircle,
 };
 
 const LABEL = TIPO_EVENTO_LABEL;

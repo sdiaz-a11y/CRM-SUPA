@@ -24,9 +24,11 @@ export function NuevoClienteModal({
     evento: "",
     tipoMembresia: "",
     etiqueta: "",
+    ofertaAdicionalId: "",
   });
   const [eventos, setEventos] = useState<{ valor: string; etiqueta: string }[]>([]);
   const [etiquetas, setEtiquetas] = useState<{ valor: string; etiqueta: string }[]>([]);
+  const [ofertasKajabi, setOfertasKajabi] = useState<{ valor: string; etiqueta: string }[]>([]);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,6 +41,13 @@ export function NuevoClienteModal({
       .then((r) => r.json())
       .then((data) => setEtiquetas((data.opciones ?? []).map((v: string) => ({ valor: v, etiqueta: v }))))
       .catch(() => setEtiquetas([]));
+    fetch("/api/kajabi/ofertas")
+      .then((r) => r.json())
+      .then((data) => {
+        const ofertas: { id: string; titulo: string }[] = data.ofertas ?? [];
+        setOfertasKajabi(ofertas.map((o) => ({ valor: o.id, etiqueta: o.titulo })));
+      })
+      .catch(() => setOfertasKajabi([]));
   }, []);
 
   useEffect(() => {
@@ -63,10 +72,11 @@ export function NuevoClienteModal({
   async function crear() {
     setGuardando(true);
     setError(null);
+    const ofertaAdicionalTitulo = ofertasKajabi.find((o) => o.valor === form.ofertaAdicionalId)?.etiqueta ?? "";
     const res = await fetch("/api/clientes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, ofertaAdicionalTitulo: form.ofertaAdicionalId ? ofertaAdicionalTitulo : undefined }),
     });
     const data = await res.json();
     setGuardando(false);
@@ -78,6 +88,7 @@ export function NuevoClienteModal({
     if (data.avisoKajabi) avisos.push(`Kajabi: ${data.avisoKajabi}`);
     if (data.avisoSkool) avisos.push(`Skool: ${data.avisoSkool}`);
     if (data.avisoGhl) avisos.push(`GoHighLevel: ${data.avisoGhl}`);
+    if (data.avisoOfertaAdicional) avisos.push(`Oferta adicional: ${data.avisoOfertaAdicional}`);
     if (avisos.length) {
       window.alert(`Cliente creado, pero hubo problemas:\n\n${avisos.join("\n")}`);
     }
@@ -162,6 +173,15 @@ export function NuevoClienteModal({
                 />
               </Campo>
             </div>
+            <Campo label="Oferta adicional (opcional)">
+              <ComboboxBuscador
+                opciones={ofertasKajabi}
+                valor={form.ofertaAdicionalId}
+                onChange={(ofertaAdicionalId) => setForm((f) => ({ ...f, ofertaAdicionalId }))}
+                placeholder="Ninguna, solo el Club…"
+                etiquetaVacio="— Ninguna —"
+              />
+            </Campo>
             <p className="text-xs text-muted">
               Al crear el cliente se le otorga automáticamente el acceso en Kajabi (oferta &quot;Club
               Sinergético&quot;, con correo de bienvenida), se le envía la invitación a la comunidad de

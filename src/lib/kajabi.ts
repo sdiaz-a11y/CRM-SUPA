@@ -367,3 +367,39 @@ export async function nuevosConOfertaDesde(
   }
   return encontrados.reverse();
 }
+
+// --- Ofertas más allá del Club Sinergético ("Otras Ofertas" del CRM y
+// ofertas extra otorgadas a un cliente del Club) ---
+
+type OfertasResponse = { data: { id: string; attributes: { title: string } }[] };
+
+// Catálogo completo de ofertas del site — primera vez que este archivo llama
+// GET /offers (todo lo demás llama /offers/{id} o relaciones de un
+// contacto), para alimentar un selector en el CRM en vez de tener IDs de
+// oferta fijos en el código.
+export async function listarOfertas(): Promise<{ id: string; titulo: string }[]> {
+  const encontradas: { id: string; titulo: string }[] = [];
+  const tamanoPagina = 50;
+  for (let pagina = 1; ; pagina++) {
+    const params = new URLSearchParams({
+      "filter[site_id]": KAJABI_SITE_ID,
+      "page[size]": String(tamanoPagina),
+      "page[number]": String(pagina),
+    });
+    const data = (await kajabiFetch(`/offers?${params}`)) as OfertasResponse;
+    if (data.data.length === 0) break;
+    encontradas.push(...data.data.map((o) => ({ id: o.id, titulo: o.attributes.title })));
+    if (data.data.length < tamanoPagina) break;
+  }
+  return encontradas;
+}
+
+// Otorga cualquier oferta (no la del Club) a un contacto — get-or-create +
+// otorgarOferta, igual que altaEnKajabi pero sin la oferta fija. Reutiliza
+// obtenerOCrearContacto (ya deja subscribed:true) y otorgarOferta (ya es
+// agnóstica al offerId) sin modificarlas.
+export async function otorgarOfertaArbitraria(nombre: string, email: string, offerId: string): Promise<string> {
+  const contactId = await obtenerOCrearContacto(nombre, email);
+  await otorgarOferta(contactId, offerId);
+  return contactId;
+}

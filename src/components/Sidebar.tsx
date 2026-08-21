@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LayoutDashboard, Users, LogOut, Library, Trash2, ShieldCheck, History, Menu, X, FileCheck2 } from "lucide-react";
+import { LayoutDashboard, Users, LogOut, Library, Trash2, ShieldCheck, History, Menu, X, FileCheck2, Gift } from "lucide-react";
 import { useSesion } from "@/lib/session-context";
 import { tienePermiso, type Accion, type Rol } from "@/lib/permisos";
 
@@ -15,6 +15,7 @@ import { tienePermiso, type Accion, type Rol } from "@/lib/permisos";
 const NAV: { href: string; label: string; icon: typeof LayoutDashboard; permiso: Accion }[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, permiso: "verDashboard" },
   { href: "/clientes", label: "Clientes", icon: Users, permiso: "verClientes" },
+  { href: "/otras-ofertas", label: "Otras Ofertas", icon: Gift, permiso: "verOtrasOfertas" },
   { href: "/solicitudes", label: "Solicitudes", icon: FileCheck2, permiso: "solicitarCliente" },
   { href: "/actividad", label: "Actividad", icon: History, permiso: "verActividad" },
   { href: "/biblioteca", label: "Biblioteca", icon: Library, permiso: "verBiblioteca" },
