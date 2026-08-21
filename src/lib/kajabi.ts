@@ -72,7 +72,10 @@ export async function crearContacto(nombre: string, email: string): Promise<stri
   const body = {
     data: {
       type: "contacts",
-      attributes: { name: nombre, email },
+      // subscribed: true suscribe al contacto a los correos de marketing de
+      // Kajabi desde el alta — igual que si hubiera marcado la casilla al
+      // comprar directamente en Kajabi.
+      attributes: { name: nombre, email, subscribed: true },
       relationships: { site: { data: { id: KAJABI_SITE_ID, type: "sites" } } },
     },
   };
@@ -83,10 +86,12 @@ export async function crearContacto(nombre: string, email: string): Promise<stri
   return data.data.id;
 }
 
-async function actualizarNombreContacto(contactId: string, nombre: string): Promise<void> {
+async function actualizarContactoExistente(contactId: string, nombre: string): Promise<void> {
   await kajabiFetch(`/contacts/${contactId}`, {
     method: "PATCH",
-    body: JSON.stringify({ data: { type: "contacts", id: contactId, attributes: { name: nombre } } }),
+    body: JSON.stringify({
+      data: { type: "contacts", id: contactId, attributes: { name: nombre, subscribed: true } },
+    }),
   });
 }
 
@@ -94,8 +99,9 @@ export async function obtenerOCrearContacto(nombre: string, email: string): Prom
   const existente = await buscarContactoPorCorreo(email);
   if (existente) {
     // Si el contacto ya existía en Kajabi (p. ej. de una compra anterior),
-    // se sincroniza el nombre con el que se capturó ahora en el CRM.
-    await actualizarNombreContacto(existente, nombre);
+    // se sincroniza el nombre con el que se capturó ahora en el CRM y se
+    // suscribe a marketing por si no lo estaba.
+    await actualizarContactoExistente(existente, nombre);
     return existente;
   }
   return crearContacto(nombre, email);
