@@ -274,10 +274,11 @@ export function ImportarClientesModal({
     if (!resultadosFiltrados.length) return;
     descargarCsv(
       "resultado-importacion.csv",
-      ["Nombre", "Correo", "CRM", "Motivo (si no se dio la oferta)", "Skool", "WhatsApp (GHL)"],
+      ["Nombre", "Correo", "Teléfono", "CRM", "Motivo (si no se dio la oferta)", "Skool", "WhatsApp (GHL)"],
       resultadosFiltrados.map((r) => [
         r.fila.nombre,
         r.fila.email,
+        r.fila.telefono,
         r.ok ? "Creado" : `Error: ${r.error ?? ""}`,
         textoKajabi(r),
         textoSkool(r),

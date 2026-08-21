@@ -214,8 +214,14 @@ export function ImportarOtrasOfertasModal({
     if (!resultadosFiltrados.length) return;
     descargarCsv(
       "resultado-otras-ofertas.csv",
-      ["Nombre", "Correo", "CRM", "Motivo (si no se dio la oferta)"],
-      resultadosFiltrados.map((r) => [r.fila.nombre, r.fila.email, r.ok ? "OK" : `Error: ${r.error ?? ""}`, textoKajabi(r)])
+      ["Nombre", "Correo", "Teléfono", "CRM", "Motivo (si no se dio la oferta)"],
+      resultadosFiltrados.map((r) => [
+        r.fila.nombre,
+        r.fila.email,
+        r.fila.telefono,
+        r.ok ? "OK" : `Error: ${r.error ?? ""}`,
+        textoKajabi(r),
+      ])
     );
   }
 

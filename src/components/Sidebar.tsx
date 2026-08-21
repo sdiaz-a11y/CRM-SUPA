@@ -14,7 +14,7 @@ import { tienePermiso, type Accion, type Rol } from "@/lib/permisos";
 // en src/lib/permisos.ts (verDashboard/verBiblioteca/verEliminados).
 const NAV: { href: string; label: string; icon: typeof LayoutDashboard; permiso: Accion }[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, permiso: "verDashboard" },
-  { href: "/clientes", label: "Clientes", icon: Users, permiso: "verClientes" },
+  { href: "/clientes", label: "Clientes Club Sinergético", icon: Users, permiso: "verClientes" },
   { href: "/otras-ofertas", label: "Otras Ofertas", icon: Gift, permiso: "verOtrasOfertas" },
   { href: "/solicitudes", label: "Solicitudes", icon: FileCheck2, permiso: "solicitarCliente" },
   { href: "/actividad", label: "Actividad", icon: History, permiso: "verActividad" },
