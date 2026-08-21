@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { X, Upload, Download, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { X, Upload, Download, CheckCircle2, XCircle, AlertTriangle, Loader2 } from "lucide-react";
 import { descargarCsv } from "@/lib/csv";
 import { ComboboxBuscador } from "./ComboboxBuscador";
 
@@ -17,6 +17,8 @@ type FilaCsv = {
   tipoMembresia: string;
 };
 
+type EstadoWhatsapp = "confirmando" | "enviado" | "fallido" | "sin_confirmacion";
+
 type ResultadoFila = {
   fila: FilaCsv;
   ok: boolean;
@@ -24,11 +26,31 @@ type ResultadoFila = {
   avisoKajabi?: string | null;
   avisoSkool?: string | null;
   avisoGhl?: string | null;
-  // Si el cliente quedó con teléfono guardado: determina si aplica mostrar
-  // "Pendiente" en WhatsApp (nunca "OK" — la entrega real solo la confirma
-  // el webhook de GHL, que no ha llegado todavía en este punto del alta).
+  // Si el cliente quedó con teléfono guardado: determina si aplica esperar
+  // confirmación de WhatsApp (nunca se asume "OK" — la entrega real solo la
+  // confirma el webhook de GHL).
   tieneTelefono?: boolean;
+  // Id del cliente ya creado — hace falta para poder consultar su timeline y
+  // esperar ahí la confirmación real de GHL.
+  clienteId?: string;
+  estadoWhatsApp?: EstadoWhatsapp;
 };
+
+type FiltroResultados = "todos" | "exitosos" | "errores";
+
+// Mismo intervalo/tope ya probado en el panel del cliente (ver
+// esperarConfirmacionWa en ClientePanel.tsx): el Workflow real de GHL ha
+// tardado entre 13 y 46s en pruebas, con margen hasta ~90s.
+const INTERVALO_WA_MS = 3000;
+const MAX_INTENTOS_WA = 30;
+
+// Si Kajabi rechazó el correo, la invitación de Skool que se mandó en
+// paralelo (Skool no valida nada, solo confirma que recibió la petición) no
+// sirve de nada hasta que se corrija el correo — no tiene sentido mostrarla
+// como "solicitada".
+function correoInvalidoEnKajabi(r: ResultadoFila): boolean {
+  return Boolean(r.avisoKajabi?.startsWith("Correo inválido"));
+}
 
 // Quita marcas diacríticas (acentos) después de normalizar a NFD, para
 // comparar encabezados sin importar si el usuario escribió "Pais" o "País".
@@ -102,6 +124,8 @@ export function ImportarClientesModal({
   const [procesando, setProcesando] = useState(false);
   const [progreso, setProgreso] = useState(0);
   const [resultados, setResultados] = useState<ResultadoFila[] | null>(null);
+  const [esperandoWa, setEsperandoWa] = useState(false);
+  const [filtroResultados, setFiltroResultados] = useState<FiltroResultados>("todos");
   const [eventos, setEventos] = useState<{ valor: string; etiqueta: string }[]>([]);
   const [etiquetas, setEtiquetas] = useState<{ valor: string; etiqueta: string }[]>([]);
   const [eventoGlobal, setEventoGlobal] = useState("");
@@ -194,6 +218,8 @@ export function ImportarClientesModal({
             avisoSkool: data.avisoSkool,
             avisoGhl: data.avisoGhl,
             tieneTelefono: Boolean(data.cliente?.telefono),
+            clienteId: data.cliente?.id,
+            estadoWhatsApp: data.cliente?.telefono && !data.avisoGhl ? "confirmando" : undefined,
           });
         }
       } catch {
@@ -204,14 +230,48 @@ export function ImportarClientesModal({
     setResultados(salida);
     setProcesando(false);
     onTerminado();
+    void esperarConfirmacionesWa(salida);
+  }
+
+  // Espera, en paralelo para todos los clientes recién creados, la
+  // confirmación real de GHL sobre si el WhatsApp de bienvenida se entregó o
+  // no — igual que hace el panel del cliente al reenviarlo a mano, en vez de
+  // asumir "OK" solo porque se pidió el envío.
+  async function esperarConfirmacionesWa(filas: ResultadoFila[]): Promise<void> {
+    const pendientes = filas.filter((r) => r.ok && !r.avisoGhl && r.tieneTelefono && r.clienteId);
+    if (pendientes.length === 0) return;
+    setEsperandoWa(true);
+    await Promise.all(pendientes.map((r) => esperarUnaConfirmacionWa(r.clienteId as string)));
+    setEsperandoWa(false);
+    onTerminado();
+  }
+
+  async function esperarUnaConfirmacionWa(clienteId: string): Promise<void> {
+    for (let intento = 0; intento < MAX_INTENTOS_WA; intento++) {
+      await new Promise((resolve) => setTimeout(resolve, INTERVALO_WA_MS));
+      const data = await fetch(`/api/clientes/${encodeURIComponent(clienteId)}/eventos`)
+        .then((r) => r.json())
+        .catch(() => null);
+      const eventosCliente: { tipo: string; autor: string; detalle: string }[] = data?.eventos ?? [];
+      const confirmacion = eventosCliente.find((e) => e.tipo === "WA_BIENVENIDA" && e.autor === "GHL");
+      if (confirmacion) {
+        actualizarEstadoWa(clienteId, confirmacion.detalle.includes("no se pudo entregar") ? "fallido" : "enviado");
+        return;
+      }
+    }
+    actualizarEstadoWa(clienteId, "sin_confirmacion");
+  }
+
+  function actualizarEstadoWa(clienteId: string, estado: EstadoWhatsapp) {
+    setResultados((prev) => prev?.map((r) => (r.clienteId === clienteId ? { ...r, estadoWhatsApp: estado } : r)) ?? prev);
   }
 
   function exportarResultados() {
-    if (!resultados) return;
+    if (!resultadosFiltrados.length) return;
     descargarCsv(
       "resultado-importacion.csv",
-      ["Nombre", "Correo", "CRM", "Kajabi", "Skool", "WhatsApp (GHL)"],
-      resultados.map((r) => [
+      ["Nombre", "Correo", "CRM", "Motivo (si no se dio la oferta)", "Skool", "WhatsApp (GHL)"],
+      resultadosFiltrados.map((r) => [
         r.fila.nombre,
         r.fila.email,
         r.ok ? "Creado" : `Error: ${r.error ?? ""}`,
@@ -223,35 +283,44 @@ export function ImportarClientesModal({
   }
 
   // Kajabi: "OK" sí es una confirmación real — significa que la oferta
-  // quedó otorgada en Kajabi en este mismo momento.
+  // quedó otorgada en Kajabi en este mismo momento. Si no, se muestra el
+  // motivo puntual (ya traducido a una frase simple por kajabi.ts).
   function textoKajabi(r: ResultadoFila): string {
     if (!r.ok) return "—";
-    return r.avisoKajabi ? `Falló: ${r.avisoKajabi}` : "OK";
+    return r.avisoKajabi ? r.avisoKajabi : "OK";
   }
 
   // Skool: el webhook solo confirma que Skool recibió la solicitud (HTTP
   // 200), no que el correo exista o que la invitación se haya entregado —
   // por eso nunca se llama "OK" aquí, para no dar a entender una entrega
-  // confirmada que el sistema no puede verificar.
+  // confirmada que el sistema no puede verificar. Y si el propio Kajabi ya
+  // dijo que el correo es inválido, esa invitación no sirve de nada hasta
+  // que se corrija.
   function textoSkool(r: ResultadoFila): string {
     if (!r.ok) return "—";
+    if (correoInvalidoEnKajabi(r)) return "Esperando correo correcto";
     return r.avisoSkool ? `Falló: ${r.avisoSkool}` : "Solicitada (sin confirmación de entrega)";
   }
 
   // WhatsApp: altaEnGhl solo crea el contacto y le pone el tag que dispara
-  // el Workflow de GHL — no espera a que WhatsApp entregue el mensaje. La
-  // única confirmación real llega después, por webhook, y actualiza el
-  // cliente a "Enviado". Aquí como mucho se puede decir "Pendiente".
+  // el Workflow de GHL — la confirmación real de si se entregó o no viene
+  // del webhook de GHL, y se espera activamente (ver esperarConfirmacionesWa)
+  // en vez de asumir un resultado.
   function textoWhatsapp(r: ResultadoFila): string {
     if (!r.ok) return "—";
     if (r.avisoGhl) return `Falló: ${r.avisoGhl}`;
     if (!r.tieneTelefono) return "— (sin teléfono)";
-    return "Pendiente de confirmación";
+    if (r.estadoWhatsApp === "enviado") return "Enviado (confirmado por GHL)";
+    if (r.estadoWhatsApp === "fallido") return "No se pudo entregar (confirmado por GHL)";
+    if (r.estadoWhatsApp === "sin_confirmacion") return "Sin confirmación de GHL (revisar más tarde)";
+    return "Esperando confirmación de GHL…";
   }
 
   const exitosos = resultados?.filter((r) => r.ok).length ?? 0;
   const conFallas = resultados?.filter((r) => r.ok && (r.avisoKajabi || r.avisoSkool || r.avisoGhl)).length ?? 0;
   const fallidos = resultados?.filter((r) => !r.ok).length ?? 0;
+  const resultadosFiltrados =
+    resultados?.filter((r) => (filtroResultados === "todos" ? true : filtroResultados === "exitosos" ? r.ok : !r.ok)) ?? [];
 
   return (
     <div
@@ -410,19 +479,42 @@ export function ImportarClientesModal({
                 </div>
               </div>
 
+              <div className="mb-3 flex items-center gap-1.5">
+                {(["todos", "exitosos", "errores"] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setFiltroResultados(f)}
+                    className={`ease-spring rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                      filtroResultados === f
+                        ? "brand-plate text-white"
+                        : "border border-silver bg-surface text-foreground hover:bg-surface-2"
+                    }`}
+                  >
+                    {f === "todos" ? "Todos" : f === "exitosos" ? "Exitosos" : "Errores"}
+                  </button>
+                ))}
+              </div>
+
+              {esperandoWa && (
+                <p className="mb-3 flex items-center gap-1.5 text-xs text-muted">
+                  <Loader2 className="h-3.5 w-3.5 flex-none animate-spin" strokeWidth={1.75} />
+                  Esperando que GHL confirme el envío del WhatsApp de bienvenida (puede tardar hasta ~90 segundos por cliente)…
+                </p>
+              )}
+
               <div className="max-h-80 overflow-y-auto rounded-xl border border-silver">
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-surface-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted">
                     <tr>
                       <th className="px-3 py-2">Cliente</th>
                       <th className="px-3 py-2">CRM</th>
-                      <th className="px-3 py-2">Kajabi</th>
+                      <th className="px-3 py-2">Motivo (si no se dio la oferta)</th>
                       <th className="px-3 py-2">Skool</th>
                       <th className="px-3 py-2">WhatsApp (GHL)</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {resultados.map((r, i) => (
+                    {resultadosFiltrados.map((r, i) => (
                       <tr key={i} className="border-t border-silver/60">
                         <td className="px-3 py-2">
                           <p className="font-medium text-foreground">{r.fila.nombre || "—"}</p>
@@ -442,17 +534,53 @@ export function ImportarClientesModal({
                           <EstadoAviso ok={r.ok} aviso={r.avisoKajabi} />
                         </td>
                         <td className="px-3 py-2">
-                          <EstadoAviso ok={r.ok} aviso={r.avisoSkool} textoOk="Solicitada" tituloOk="Skool confirmó que recibió la solicitud (HTTP 200) — no confirma que el correo exista ni que la invitación se haya entregado." />
-                        </td>
-                        <td className="px-3 py-2">
-                          {r.ok && !r.avisoGhl && !r.tieneTelefono ? (
-                            <span className="text-muted">— sin teléfono</span>
-                          ) : r.ok && !r.avisoGhl ? (
-                            <span className="text-muted" title="El contacto se dio de alta en GHL y se disparó el Workflow, pero la entrega real de WhatsApp solo se confirma después, por webhook.">
-                              Pendiente
+                          {!r.ok ? (
+                            <span className="text-muted">—</span>
+                          ) : correoInvalidoEnKajabi(r) ? (
+                            <span
+                              className="text-warning"
+                              title="Kajabi ya dijo que este correo es inválido — la invitación de Skool no sirve de nada hasta que se corrija."
+                            >
+                              Esperando correo correcto
                             </span>
                           ) : (
+                            <EstadoAviso
+                              ok={r.ok}
+                              aviso={r.avisoSkool}
+                              textoOk="Solicitada"
+                              tituloOk="Skool confirmó que recibió la solicitud (HTTP 200) — no confirma que el correo exista ni que la invitación se haya entregado."
+                            />
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          {!r.ok ? (
+                            <span className="text-muted">—</span>
+                          ) : r.avisoGhl ? (
                             <EstadoAviso ok={r.ok} aviso={r.avisoGhl} />
+                          ) : !r.tieneTelefono ? (
+                            <span className="text-muted">— sin teléfono</span>
+                          ) : r.estadoWhatsApp === "enviado" ? (
+                            <span className="flex items-center gap-1 text-success">
+                              <CheckCircle2 className="h-4 w-4 flex-none" strokeWidth={1.75} />
+                              Enviado
+                            </span>
+                          ) : r.estadoWhatsApp === "fallido" ? (
+                            <span className="flex items-center gap-1 text-danger">
+                              <XCircle className="h-4 w-4 flex-none" strokeWidth={1.75} />
+                              No se pudo entregar
+                            </span>
+                          ) : r.estadoWhatsApp === "sin_confirmacion" ? (
+                            <span
+                              className="text-muted"
+                              title="GHL no confirmó a tiempo (más de ~90s) — revisa el estado de este cliente más tarde en su panel."
+                            >
+                              Sin confirmación aún
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 text-muted">
+                              <Loader2 className="h-3.5 w-3.5 flex-none animate-spin" strokeWidth={1.75} />
+                              Esperando confirmación…
+                            </span>
                           )}
                         </td>
                       </tr>
@@ -464,10 +592,11 @@ export function ImportarClientesModal({
               <div className="mt-4 flex gap-2">
                 <button
                   onClick={exportarResultados}
-                  className="ease-spring flex items-center gap-1.5 rounded-lg border border-silver bg-surface px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-surface-2"
+                  disabled={resultadosFiltrados.length === 0}
+                  className="ease-spring flex items-center gap-1.5 rounded-lg border border-silver bg-surface px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-surface-2 disabled:opacity-40"
                 >
                   <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
-                  Exportar resultados
+                  Exportar {filtroResultados === "todos" ? "todos" : filtroResultados} ({resultadosFiltrados.length})
                 </button>
                 <button
                   onClick={onClose}
