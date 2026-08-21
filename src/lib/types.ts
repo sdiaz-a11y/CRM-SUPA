@@ -195,6 +195,10 @@ export type OtraOfertaCliente = {
   kajabiContactId: string | null;
   creadoEn: string;
   actualizadoEn: string;
+  // Título de la oferta otorgada más recientemente — solo lo llena
+  // listarOtrasOfertasClientes (para la columna de la lista); en el resto
+  // de los casos queda en null, el detalle trae el historial completo.
+  ultimaOferta: string | null;
 };
 
 // Una oferta otorgada, fechada — usado tanto por otras_ofertas_otorgadas

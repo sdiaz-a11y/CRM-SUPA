@@ -167,18 +167,18 @@ export default function OtrasOfertasPage() {
 
                 <table className="hidden w-full min-w-[900px] table-fixed text-sm md:table">
                   <colgroup>
+                    <col className="w-[14%]" />
                     <col className="w-[22%]" />
-                    <col className="w-[28%]" />
-                    <col className="w-[16%]" />
-                    <col className="w-[17%]" />
-                    <col className="w-[17%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[32%]" />
+                    <col className="w-[18%]" />
                   </colgroup>
                   <thead className="sticky top-0 z-10 bg-surface">
                     <tr className="border-b border-silver text-left text-xs font-semibold uppercase tracking-wide text-muted">
                       <th className="whitespace-nowrap px-5 py-3">Nombre</th>
                       <th className="whitespace-nowrap px-5 py-3">Correo</th>
                       <th className="whitespace-nowrap px-5 py-3">Teléfono</th>
-                      <th className="whitespace-nowrap px-5 py-3">Etiqueta</th>
+                      <th className="whitespace-nowrap px-5 py-3">Oferta</th>
                       <th className="whitespace-nowrap px-5 py-3">Tags</th>
                     </tr>
                   </thead>
@@ -200,7 +200,9 @@ export default function OtrasOfertasPage() {
                           {c.email}
                         </td>
                         <td className="truncate px-5 py-2.5 text-muted">{c.telefono || "—"}</td>
-                        <td className="truncate px-5 py-2.5 text-muted">{c.etiqueta || "—"}</td>
+                        <td className="truncate px-5 py-2.5 text-muted" title={c.ultimaOferta ?? undefined}>
+                          {c.ultimaOferta || "—"}
+                        </td>
                         <td className="truncate px-5 py-2.5 text-muted">{c.tags.join(", ") || "—"}</td>
                       </tr>
                     ))}

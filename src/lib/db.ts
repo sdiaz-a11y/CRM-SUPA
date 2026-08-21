@@ -1114,6 +1114,7 @@ function filaAOtraOfertaCliente(r: OtraOfertaClienteRow): OtraOfertaCliente {
     kajabiContactId: r.kajabi_contact_id,
     creadoEn: r.creado_en,
     actualizadoEn: r.actualizado_en,
+    ultimaOferta: null,
   };
 }
 
@@ -1168,7 +1169,26 @@ export async function listarOtrasOfertasClientes(opciones?: FiltrosOtrasOfertas)
 
   const { data, error, count } = await query;
   if (error) throw error;
-  return { clientes: (data as OtraOfertaClienteRow[]).map(filaAOtraOfertaCliente), total: count ?? 0 };
+  const clientes = (data as OtraOfertaClienteRow[]).map(filaAOtraOfertaCliente);
+
+  // La oferta más reciente de cada uno, para la columna de la lista — una
+  // sola consulta por página (no una por fila) a la tabla de historial.
+  if (clientes.length > 0) {
+    const ids = clientes.map((c) => c.id);
+    const { data: grantsData, error: errorGrants } = await supabase
+      .from("otras_ofertas_otorgadas")
+      .select("cliente_id, oferta_titulo")
+      .in("cliente_id", ids)
+      .order("fecha_otorgada", { ascending: false });
+    if (errorGrants) throw errorGrants;
+    const ultimaPorCliente = new Map<string, string>();
+    for (const g of (grantsData ?? []) as { cliente_id: string; oferta_titulo: string }[]) {
+      if (!ultimaPorCliente.has(g.cliente_id)) ultimaPorCliente.set(g.cliente_id, g.oferta_titulo);
+    }
+    for (const c of clientes) c.ultimaOferta = ultimaPorCliente.get(c.id) ?? null;
+  }
+
+  return { clientes, total: count ?? 0 };
 }
 
 const CAP_EXPORTACION_OTRAS_OFERTAS = 50_000;
