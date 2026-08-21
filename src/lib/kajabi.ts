@@ -75,15 +75,36 @@ type ContactoBuscado = {
   data: { id: string; attributes: { email: string } }[];
 };
 
-export async function buscarContactoPorCorreo(email: string): Promise<string | null> {
-  const params = new URLSearchParams({
-    "filter[site_id]": KAJABI_SITE_ID,
-    "filter[search]": email,
-  });
-  const data = (await kajabiFetch(`/contacts?${params}`)) as ContactoBuscado;
+// filter[search] de Kajabi es una búsqueda de texto ancha (por nombre o
+// correo), no un filtro exacto — con nombres/correos comunes, el contacto
+// que se busca puede quedar fuera de la primera página. Se pagina hasta
+// encontrar el match exacto por correo o agotar las páginas (con un tope de
+// seguridad para no barrer miles de contactos si nunca aparece).
+async function buscarPaginandoPorCorreo<T extends { attributes: { email: string } }>(
+  email: string
+): Promise<T | null> {
   const correoNormalizado = email.trim().toLowerCase();
-  const encontrado = data.data.find((c) => c.attributes.email?.trim().toLowerCase() === correoNormalizado);
-  return encontrado?.id ?? null;
+  const tamanoPagina = 50;
+  const MAX_PAGINAS = 20;
+  for (let pagina = 1; pagina <= MAX_PAGINAS; pagina++) {
+    const params = new URLSearchParams({
+      "filter[site_id]": KAJABI_SITE_ID,
+      "filter[search]": email,
+      "page[size]": String(tamanoPagina),
+      "page[number]": String(pagina),
+    });
+    const data = (await kajabiFetch(`/contacts?${params}`)) as { data: T[] };
+    if (data.data.length === 0) break;
+    const encontrado = data.data.find((c) => c.attributes.email?.trim().toLowerCase() === correoNormalizado);
+    if (encontrado) return encontrado;
+    if (data.data.length < tamanoPagina) break;
+  }
+  return null;
+}
+
+export async function buscarContactoPorCorreo(email: string): Promise<string | null> {
+  const contacto = await buscarPaginandoPorCorreo<ContactoBuscado["data"][number]>(email);
+  return contacto?.id ?? null;
 }
 
 type ContactoCreado = { data: { id: string } };
@@ -273,13 +294,7 @@ export async function obtenerPerfilKajabi(email: string): Promise<PerfilKajabi> 
     ultimaActividad: null,
   };
 
-  const params = new URLSearchParams({
-    "filter[site_id]": KAJABI_SITE_ID,
-    "filter[search]": email,
-  });
-  const busqueda = (await kajabiFetch(`/contacts?${params}`)) as ContactoPerfil;
-  const correoNormalizado = email.trim().toLowerCase();
-  const contacto = busqueda.data.find((c) => c.attributes.email?.trim().toLowerCase() === correoNormalizado);
+  const contacto = await buscarPaginandoPorCorreo<ContactoPerfil["data"][number]>(email);
   if (!contacto) return vacio;
 
   const [ofertasRes, customerRes] = await Promise.all([

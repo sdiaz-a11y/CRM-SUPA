@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Search, Upload, Download, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Upload, Download, Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import type { OtraOfertaCliente } from "@/lib/types";
 import { useSesion } from "@/lib/session-context";
 import { tienePermiso } from "@/lib/permisos";
 import { descargarCsv } from "@/lib/csv";
 import { ImportarOtrasOfertasModal } from "@/components/ImportarOtrasOfertasModal";
+import { NuevaOtraOfertaModal } from "@/components/NuevaOtraOfertaModal";
 import { OtraOfertaDetalle } from "@/components/OtraOfertaDetalle";
 
 const LIMITE = 100;
@@ -23,6 +24,7 @@ export default function OtrasOfertasPage() {
   const [pagina, setPagina] = useState(1);
   const [seleccionado, setSeleccionado] = useState<string | null>(null);
   const [mostrarImportar, setMostrarImportar] = useState(false);
+  const [mostrarNuevo, setMostrarNuevo] = useState(false);
   const [descargando, setDescargando] = useState(false);
   const [recargaKey, setRecargaKey] = useState(0);
 
@@ -107,13 +109,22 @@ export default function OtrasOfertasPage() {
             </button>
           )}
           {puedeImportar && (
-            <button
-              onClick={() => setMostrarImportar(true)}
-              className="ease-spring flex items-center gap-2 rounded-xl brand-plate px-4 py-2.5 text-sm font-medium text-white transition"
-            >
-              <Upload className="h-4 w-4" strokeWidth={2} />
-              Importar CSV
-            </button>
+            <>
+              <button
+                onClick={() => setMostrarImportar(true)}
+                className="ease-spring flex items-center gap-2 rounded-xl border border-silver bg-surface px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-surface-2"
+              >
+                <Upload className="h-4 w-4" strokeWidth={2} />
+                Importar CSV
+              </button>
+              <button
+                onClick={() => setMostrarNuevo(true)}
+                className="ease-spring flex items-center gap-2 rounded-xl brand-plate px-4 py-2.5 text-sm font-medium text-white transition"
+              >
+                <Plus className="h-4 w-4" strokeWidth={2} />
+                Nuevo cliente
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -235,6 +246,13 @@ export default function OtrasOfertasPage() {
         <ImportarOtrasOfertasModal
           onClose={() => setMostrarImportar(false)}
           onTerminado={() => setRecargaKey((k) => k + 1)}
+        />
+      )}
+
+      {mostrarNuevo && (
+        <NuevaOtraOfertaModal
+          onClose={() => setMostrarNuevo(false)}
+          onCreado={() => setRecargaKey((k) => k + 1)}
         />
       )}
     </div>

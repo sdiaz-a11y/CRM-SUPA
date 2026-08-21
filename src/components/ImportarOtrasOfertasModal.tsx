@@ -20,7 +20,7 @@ type ResultadoFila = {
   avisoKajabi?: string | null;
 };
 
-type FiltroResultados = "todos" | "exitosos" | "errores";
+type FiltroResultados = "todos" | "exitosos" | "avisos" | "errores";
 
 // Mismo parser mínimo de CSV que ImportarClientesModal.tsx (RFC 4180 básico,
 // sin depender de una librería).
@@ -203,7 +203,12 @@ export function ImportarOtrasOfertasModal({
   }
 
   const resultadosFiltrados =
-    resultados?.filter((r) => (filtroResultados === "todos" ? true : filtroResultados === "exitosos" ? r.ok : !r.ok)) ?? [];
+    resultados?.filter((r) => {
+      if (filtroResultados === "todos") return true;
+      if (filtroResultados === "exitosos") return r.ok;
+      if (filtroResultados === "avisos") return r.ok && !!r.avisoKajabi;
+      return !r.ok; // errores
+    }) ?? [];
 
   function exportarResultados() {
     if (!resultadosFiltrados.length) return;
@@ -217,6 +222,13 @@ export function ImportarOtrasOfertasModal({
   const exitosos = resultados?.filter((r) => r.ok).length ?? 0;
   const conAviso = resultados?.filter((r) => r.ok && r.avisoKajabi).length ?? 0;
   const fallidos = resultados?.filter((r) => !r.ok).length ?? 0;
+
+  const LABEL_FILTRO: Record<FiltroResultados, string> = {
+    todos: "Todos",
+    exitosos: "Exitosos",
+    avisos: "Revisar",
+    errores: "Errores",
+  };
 
   return (
     <div
@@ -386,7 +398,7 @@ export function ImportarOtrasOfertasModal({
               <div className="mb-4 grid grid-cols-3 gap-2">
                 <div className="rounded-xl border border-success/30 bg-success/10 p-3 text-center">
                   <p className="text-lg font-semibold text-success">{exitosos}</p>
-                  <p className="text-xs text-muted">Con oferta otorgada</p>
+                  <p className="text-xs text-muted">Creados en el CRM</p>
                 </div>
                 <div className="rounded-xl border border-warning/30 bg-warning/10 p-3 text-center">
                   <p className="text-lg font-semibold text-warning">{conAviso}</p>
@@ -399,7 +411,7 @@ export function ImportarOtrasOfertasModal({
               </div>
 
               <div className="mb-3 flex items-center gap-1.5">
-                {(["todos", "exitosos", "errores"] as const).map((f) => (
+                {(["todos", "exitosos", "avisos", "errores"] as const).map((f) => (
                   <button
                     key={f}
                     onClick={() => setFiltroResultados(f)}
@@ -409,7 +421,7 @@ export function ImportarOtrasOfertasModal({
                         : "border border-silver bg-surface text-foreground hover:bg-surface-2"
                     }`}
                   >
-                    {f === "todos" ? "Todos" : f === "exitosos" ? "Exitosos" : "Errores"}
+                    {LABEL_FILTRO[f]}
                   </button>
                 ))}
               </div>
@@ -465,7 +477,7 @@ export function ImportarOtrasOfertasModal({
                   className="ease-spring flex items-center gap-1.5 rounded-lg border border-silver bg-surface px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-surface-2 disabled:opacity-40"
                 >
                   <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
-                  Exportar {filtroResultados === "todos" ? "todos" : filtroResultados} ({resultadosFiltrados.length})
+                  Exportar {filtroResultados === "todos" ? "todos" : LABEL_FILTRO[filtroResultados].toLowerCase()} ({resultadosFiltrados.length})
                 </button>
                 <button
                   onClick={onClose}
