@@ -145,6 +145,28 @@ export default function ClientesPage() {
     setClientes((prev) => prev.map((c) => (c.id === cliente.id ? cliente : c)));
   }
 
+  // Espera la confirmación real de WhatsApp de GHL para un cliente recién
+  // creado desde "Nuevo cliente", y actualiza su fila en la lista apenas
+  // llega — sin esto, el foquito se quedaba apagado hasta que alguien
+  // entraba y salía del perfil (que es lo único que refrescaba esa fila).
+  // Mismo intervalo/tope que ya usa ClientePanel.tsx.
+  async function esperarConfirmacionWaEnLista(clienteId: string) {
+    const INTERVALO_MS = 3000;
+    const MAX_INTENTOS = 30; // ~90s
+    for (let intento = 0; intento < MAX_INTENTOS; intento++) {
+      await new Promise((resolve) => setTimeout(resolve, INTERVALO_MS));
+      const data = await fetch(`/api/clientes/${encodeURIComponent(clienteId)}/eventos`)
+        .then((r) => r.json())
+        .catch(() => null);
+      const eventos: { tipo: string; autor: string }[] = data?.eventos ?? [];
+      if (eventos.some((e) => e.tipo === "WA_BIENVENIDA" && e.autor === "GHL")) break;
+    }
+    const clienteRes = await fetch(`/api/clientes/${encodeURIComponent(clienteId)}`)
+      .then((r) => r.json())
+      .catch(() => null);
+    if (clienteRes?.cliente) actualizarEnLista(clienteRes.cliente);
+  }
+
   function quitarDeLista(id: string) {
     setClientes((prev) => prev.filter((c) => c.id !== id));
     setTotal((prev) => Math.max(0, prev - 1));
@@ -465,7 +487,11 @@ export default function ClientesPage() {
       {mostrarNuevo && (
         <NuevoClienteModal
           onClose={() => setMostrarNuevo(false)}
-          onCreado={(cliente) => setClientes((prev) => [cliente, ...prev])}
+          onCreado={(cliente) => {
+            setClientes((prev) => [cliente, ...prev]);
+            setTotal((prev) => prev + 1);
+            if (cliente.telefono) void esperarConfirmacionWaEnLista(cliente.id);
+          }}
         />
       )}
 
@@ -659,10 +685,18 @@ function EstadoOnboarding({ cliente }: { cliente: Cliente }) {
   const kajabiActivo = cliente.accesoPlataforma?.trim().toLowerCase() === "si" && !pausado;
   const skoolOk = !!cliente.invitacionSkool;
   const bienvenidaOk = cliente.contactoWhats === "Enviado";
+  // Todavía no hay confirmación real de GHL, pero sí se le pidió el envío
+  // (tiene teléfono) — el foquito parpadea para dejar claro que está
+  // esperando, no que simplemente no aplica.
+  const esperandoBienvenida = !bienvenidaOk && cliente.contactoWhats === "Pendiente" && !!cliente.telefono;
 
   const tituloKajabi = pausado ? "Kajabi: pausado" : kajabiActivo ? "Kajabi: acceso activo" : "Kajabi: sin acceso";
   const tituloSkool = skoolOk ? "Skool: invitación enviada" : "Skool: sin invitación";
-  const tituloBienvenida = bienvenidaOk ? "Mensaje de bienvenida: enviado" : "Mensaje de bienvenida: pendiente";
+  const tituloBienvenida = bienvenidaOk
+    ? "Mensaje de bienvenida: enviado"
+    : esperandoBienvenida
+      ? "Mensaje de bienvenida: esperando confirmación de GHL…"
+      : "Mensaje de bienvenida: pendiente";
 
   return (
     <div
@@ -685,7 +719,11 @@ function EstadoOnboarding({ cliente }: { cliente: Cliente }) {
       />
       <span
         className={`h-4 w-1.5 flex-none -skew-x-12 rounded-full transition ${
-          bienvenidaOk ? "bg-success shadow-[0_0_6px_var(--color-success)]" : "bg-silver"
+          bienvenidaOk
+            ? "animate-foco-encendido bg-success shadow-[0_0_6px_var(--color-success)]"
+            : esperandoBienvenida
+              ? "animate-foco-espera bg-success"
+              : "bg-silver"
         }`}
       />
     </div>

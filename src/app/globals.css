@@ -161,6 +161,46 @@ body {
     animation: slide-in-left 0.28s cubic-bezier(0.32, 0.72, 0, 1);
   }
 
+  /* Foquitos de estado (Kajabi/Skool/Bienvenida) en la lista de clientes:
+     un parpadeo suave mientras se espera confirmación real, y un destello
+     de "encendido" que se dispara solo una vez, justo cuando pasa de
+     apagado a prendido (el navegador reinicia la animación cuando
+     animation-name cambia de "none" a un nombre real, así que basta con
+     agregar la clase condicionalmente — no hace falta JS para disparar
+     esto una sola vez). */
+  @keyframes foco-espera {
+    0%,
+    100% {
+      opacity: 0.3;
+    }
+    50% {
+      opacity: 0.85;
+    }
+  }
+
+  .animate-foco-espera {
+    animation: foco-espera 1.6s ease-in-out infinite;
+  }
+
+  @keyframes foco-encendido {
+    0% {
+      transform: scale(1);
+      filter: brightness(1);
+    }
+    35% {
+      transform: scale(1.7);
+      filter: brightness(2.4);
+    }
+    100% {
+      transform: scale(1);
+      filter: brightness(1);
+    }
+  }
+
+  .animate-foco-encendido {
+    animation: foco-encendido 0.55s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
   /* Fondo de marca: azul tecno profundo con destellos diagonales. */
   .bg-brand {
     background-color: #050b1f;
