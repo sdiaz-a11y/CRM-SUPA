@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { X, Upload, Download, CheckCircle2, XCircle, AlertTriangle, Loader2 } from "lucide-react";
+import { X, Upload, Download, CheckCircle2, XCircle, AlertTriangle, Loader2, RefreshCw } from "lucide-react";
 import { descargarCsv } from "@/lib/csv";
 import { ComboboxBuscador } from "./ComboboxBuscador";
 
@@ -124,7 +124,6 @@ export function ImportarClientesModal({
   const [procesando, setProcesando] = useState(false);
   const [progreso, setProgreso] = useState(0);
   const [resultados, setResultados] = useState<ResultadoFila[] | null>(null);
-  const [esperandoWa, setEsperandoWa] = useState(false);
   const [filtroResultados, setFiltroResultados] = useState<FiltroResultados>("todos");
   const [eventos, setEventos] = useState<{ valor: string; etiqueta: string }[]>([]);
   const [etiquetas, setEtiquetas] = useState<{ valor: string; etiqueta: string }[]>([]);
@@ -240,10 +239,15 @@ export function ImportarClientesModal({
   async function esperarConfirmacionesWa(filas: ResultadoFila[]): Promise<void> {
     const pendientes = filas.filter((r) => r.ok && !r.avisoGhl && r.tieneTelefono && r.clienteId);
     if (pendientes.length === 0) return;
-    setEsperandoWa(true);
     await Promise.all(pendientes.map((r) => esperarUnaConfirmacionWa(r.clienteId as string)));
-    setEsperandoWa(false);
     onTerminado();
+  }
+
+  // Botón "Reintentar" para las filas que quedaron en "sin_confirmacion" —
+  // el Workflow de GHL puede tardar más de los ~90s que ya se esperaron.
+  function reintentarConfirmacionWa(clienteId: string) {
+    actualizarEstadoWa(clienteId, "confirmando");
+    void esperarUnaConfirmacionWa(clienteId).then(() => onTerminado());
   }
 
   async function esperarUnaConfirmacionWa(clienteId: string): Promise<void> {
@@ -321,6 +325,9 @@ export function ImportarClientesModal({
   const fallidos = resultados?.filter((r) => !r.ok).length ?? 0;
   const resultadosFiltrados =
     resultados?.filter((r) => (filtroResultados === "todos" ? true : filtroResultados === "exitosos" ? r.ok : !r.ok)) ?? [];
+  // Derivado en vez de un estado propio: siempre refleja la realidad, tanto
+  // para la tanda inicial como para reintentos individuales sueltos.
+  const esperandoWa = resultados?.some((r) => r.estadoWhatsApp === "confirmando") ?? false;
 
   return (
     <div
@@ -570,11 +577,21 @@ export function ImportarClientesModal({
                               No se pudo entregar
                             </span>
                           ) : r.estadoWhatsApp === "sin_confirmacion" ? (
-                            <span
-                              className="text-muted"
-                              title="GHL no confirmó a tiempo (más de ~90s) — revisa el estado de este cliente más tarde en su panel."
-                            >
-                              Sin confirmación aún
+                            <span className="flex items-center gap-2">
+                              <span
+                                className="text-muted"
+                                title="GHL no confirmó a tiempo (más de ~90s) — puede que el Workflow todavía esté corriendo."
+                              >
+                                Sin confirmación aún
+                              </span>
+                              <button
+                                onClick={() => reintentarConfirmacionWa(r.clienteId as string)}
+                                title="Volver a esperar la confirmación de GHL"
+                                className="ease-spring flex items-center gap-1 rounded-lg border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary transition hover:bg-primary/20"
+                              >
+                                <RefreshCw className="h-3 w-3" strokeWidth={2} />
+                                Reintentar
+                              </button>
                             </span>
                           ) : (
                             <span className="flex items-center gap-1 text-muted">
