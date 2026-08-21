@@ -35,6 +35,26 @@ async function obtenerToken(): Promise<string> {
   return tokenCache.token;
 }
 
+// Kajabi devuelve errores en formato JSON:API (`{errors: [{detail, ...}]}`).
+// El texto crudo ("Kajabi /contacts falló (422): {\"errors\":[...]}") no le
+// sirve a nadie en el reporte de importación — se traduce a frases simples
+// que el usuario entienda sin abrir la consola.
+const MENSAJES_ERROR_KAJABI: Record<string, string> = {
+  "Undeliverable address": "Correo inválido (no se puede entregar)",
+  "Please double check your email address.": "Correo inválido",
+};
+
+function mensajeAmigableKajabi(status: number, bodyText: string): string {
+  try {
+    const body = JSON.parse(bodyText) as { errors?: { detail?: string; title?: string }[] };
+    const detalle = body.errors?.[0]?.detail || body.errors?.[0]?.title;
+    if (detalle) return MENSAJES_ERROR_KAJABI[detalle] ?? detalle;
+  } catch {
+    // El cuerpo no era JSON — se usa el mensaje genérico de abajo.
+  }
+  return `Kajabi respondió con error (${status})`;
+}
+
 async function kajabiFetch(path: string, init?: RequestInit): Promise<unknown> {
   const token = await obtenerToken();
   const res = await fetch(`${KAJABI_API}${path}`, {
@@ -46,7 +66,7 @@ async function kajabiFetch(path: string, init?: RequestInit): Promise<unknown> {
       ...init?.headers,
     },
   });
-  if (!res.ok) throw new Error(`Kajabi ${path} falló (${res.status}): ${await res.text()}`);
+  if (!res.ok) throw new Error(mensajeAmigableKajabi(res.status, await res.text()));
   if (res.status === 204) return null;
   return res.json();
 }

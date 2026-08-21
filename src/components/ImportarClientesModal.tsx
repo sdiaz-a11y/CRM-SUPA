@@ -24,6 +24,10 @@ type ResultadoFila = {
   avisoKajabi?: string | null;
   avisoSkool?: string | null;
   avisoGhl?: string | null;
+  // Si el cliente quedó con teléfono guardado: determina si aplica mostrar
+  // "Pendiente" en WhatsApp (nunca "OK" — la entrega real solo la confirma
+  // el webhook de GHL, que no ha llegado todavía en este punto del alta).
+  tieneTelefono?: boolean;
 };
 
 // Quita marcas diacríticas (acentos) después de normalizar a NFD, para
@@ -189,6 +193,7 @@ export function ImportarClientesModal({
             avisoKajabi: data.avisoKajabi,
             avisoSkool: data.avisoSkool,
             avisoGhl: data.avisoGhl,
+            tieneTelefono: Boolean(data.cliente?.telefono),
           });
         }
       } catch {
@@ -205,16 +210,43 @@ export function ImportarClientesModal({
     if (!resultados) return;
     descargarCsv(
       "resultado-importacion.csv",
-      ["Nombre", "Correo", "CRM", "Kajabi", "Skool", "GHL / WhatsApp"],
+      ["Nombre", "Correo", "CRM", "Kajabi", "Skool", "WhatsApp (GHL)"],
       resultados.map((r) => [
         r.fila.nombre,
         r.fila.email,
         r.ok ? "Creado" : `Error: ${r.error ?? ""}`,
-        r.ok ? (r.avisoKajabi ? `Falló: ${r.avisoKajabi}` : "OK") : "—",
-        r.ok ? (r.avisoSkool ? `Falló: ${r.avisoSkool}` : "OK") : "—",
-        r.ok ? (r.avisoGhl ? `Falló: ${r.avisoGhl}` : "OK") : "—",
+        textoKajabi(r),
+        textoSkool(r),
+        textoWhatsapp(r),
       ])
     );
+  }
+
+  // Kajabi: "OK" sí es una confirmación real — significa que la oferta
+  // quedó otorgada en Kajabi en este mismo momento.
+  function textoKajabi(r: ResultadoFila): string {
+    if (!r.ok) return "—";
+    return r.avisoKajabi ? `Falló: ${r.avisoKajabi}` : "OK";
+  }
+
+  // Skool: el webhook solo confirma que Skool recibió la solicitud (HTTP
+  // 200), no que el correo exista o que la invitación se haya entregado —
+  // por eso nunca se llama "OK" aquí, para no dar a entender una entrega
+  // confirmada que el sistema no puede verificar.
+  function textoSkool(r: ResultadoFila): string {
+    if (!r.ok) return "—";
+    return r.avisoSkool ? `Falló: ${r.avisoSkool}` : "Solicitada (sin confirmación de entrega)";
+  }
+
+  // WhatsApp: altaEnGhl solo crea el contacto y le pone el tag que dispara
+  // el Workflow de GHL — no espera a que WhatsApp entregue el mensaje. La
+  // única confirmación real llega después, por webhook, y actualiza el
+  // cliente a "Enviado". Aquí como mucho se puede decir "Pendiente".
+  function textoWhatsapp(r: ResultadoFila): string {
+    if (!r.ok) return "—";
+    if (r.avisoGhl) return `Falló: ${r.avisoGhl}`;
+    if (!r.tieneTelefono) return "— (sin teléfono)";
+    return "Pendiente de confirmación";
   }
 
   const exitosos = resultados?.filter((r) => r.ok).length ?? 0;
@@ -386,7 +418,7 @@ export function ImportarClientesModal({
                       <th className="px-3 py-2">CRM</th>
                       <th className="px-3 py-2">Kajabi</th>
                       <th className="px-3 py-2">Skool</th>
-                      <th className="px-3 py-2">WhatsApp</th>
+                      <th className="px-3 py-2">WhatsApp (GHL)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -410,10 +442,18 @@ export function ImportarClientesModal({
                           <EstadoAviso ok={r.ok} aviso={r.avisoKajabi} />
                         </td>
                         <td className="px-3 py-2">
-                          <EstadoAviso ok={r.ok} aviso={r.avisoSkool} />
+                          <EstadoAviso ok={r.ok} aviso={r.avisoSkool} textoOk="Solicitada" tituloOk="Skool confirmó que recibió la solicitud (HTTP 200) — no confirma que el correo exista ni que la invitación se haya entregado." />
                         </td>
                         <td className="px-3 py-2">
-                          <EstadoAviso ok={r.ok} aviso={r.avisoGhl} />
+                          {r.ok && !r.avisoGhl && !r.tieneTelefono ? (
+                            <span className="text-muted">— sin teléfono</span>
+                          ) : r.ok && !r.avisoGhl ? (
+                            <span className="text-muted" title="El contacto se dio de alta en GHL y se disparó el Workflow, pero la entrega real de WhatsApp solo se confirma después, por webhook.">
+                              Pendiente
+                            </span>
+                          ) : (
+                            <EstadoAviso ok={r.ok} aviso={r.avisoGhl} />
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -444,9 +484,27 @@ export function ImportarClientesModal({
   );
 }
 
-function EstadoAviso({ ok, aviso }: { ok: boolean; aviso?: string | null }) {
+function EstadoAviso({
+  ok,
+  aviso,
+  textoOk,
+  tituloOk,
+}: {
+  ok: boolean;
+  aviso?: string | null;
+  textoOk?: string;
+  tituloOk?: string;
+}) {
   if (!ok) return <span className="text-muted">—</span>;
-  if (!aviso) return <CheckCircle2 className="h-4 w-4 text-success" strokeWidth={1.75} />;
+  if (!aviso) {
+    if (!textoOk) return <CheckCircle2 className="h-4 w-4 text-success" strokeWidth={1.75} />;
+    return (
+      <span className="flex items-center gap-1 text-success" title={tituloOk}>
+        <CheckCircle2 className="h-4 w-4 flex-none" strokeWidth={1.75} />
+        {textoOk}
+      </span>
+    );
+  }
   return (
     <span className="flex items-start gap-1 text-warning" title={aviso}>
       <AlertTriangle className="h-4 w-4 flex-none" strokeWidth={1.75} />
