@@ -56,6 +56,10 @@ export default function ClientesPage() {
   const [mostrarImportar, setMostrarImportar] = useState(false);
   const [descargando, setDescargando] = useState(false);
   const [recargaKey, setRecargaKey] = useState(0);
+  // Ids de clientes que se están consultando activamente en este momento
+  // (recién creados desde "Nuevo cliente") — el foquito de Bienvenida WA
+  // solo parpadea mientras de verdad se está preguntando, no para siempre.
+  const [clientesEsperandoWa, setClientesEsperandoWa] = useState<Set<string>>(new Set());
   const [filtros, setFiltros] = useState(FILTROS_VACIOS);
   // En celular los filtros arrancan ocultos dentro de una pestaña
   // desplegable — en escritorio (md+) siempre se ven, sin importar esto.
@@ -151,20 +155,32 @@ export default function ClientesPage() {
   // entraba y salía del perfil (que es lo único que refrescaba esa fila).
   // Mismo intervalo/tope que ya usa ClientePanel.tsx.
   async function esperarConfirmacionWaEnLista(clienteId: string) {
-    const INTERVALO_MS = 3000;
-    const MAX_INTENTOS = 30; // ~90s
-    for (let intento = 0; intento < MAX_INTENTOS; intento++) {
-      await new Promise((resolve) => setTimeout(resolve, INTERVALO_MS));
-      const data = await fetch(`/api/clientes/${encodeURIComponent(clienteId)}/eventos`)
+    setClientesEsperandoWa((prev) => new Set(prev).add(clienteId));
+    try {
+      const INTERVALO_MS = 3000;
+      const MAX_INTENTOS = 30; // ~90s
+      for (let intento = 0; intento < MAX_INTENTOS; intento++) {
+        await new Promise((resolve) => setTimeout(resolve, INTERVALO_MS));
+        const data = await fetch(`/api/clientes/${encodeURIComponent(clienteId)}/eventos`)
+          .then((r) => r.json())
+          .catch(() => null);
+        const eventos: { tipo: string; autor: string }[] = data?.eventos ?? [];
+        if (eventos.some((e) => e.tipo === "WA_BIENVENIDA" && e.autor === "GHL")) break;
+      }
+      const clienteRes = await fetch(`/api/clientes/${encodeURIComponent(clienteId)}`)
         .then((r) => r.json())
         .catch(() => null);
-      const eventos: { tipo: string; autor: string }[] = data?.eventos ?? [];
-      if (eventos.some((e) => e.tipo === "WA_BIENVENIDA" && e.autor === "GHL")) break;
+      if (clienteRes?.cliente) actualizarEnLista(clienteRes.cliente);
+    } finally {
+      // Se quita de "en espera" tanto si llegó confirmación como si se
+      // acabaron los intentos sin noticias — en ambos casos ya se dejó de
+      // preguntar, así que el foquito debe dejar de parpadear.
+      setClientesEsperandoWa((prev) => {
+        const siguiente = new Set(prev);
+        siguiente.delete(clienteId);
+        return siguiente;
+      });
     }
-    const clienteRes = await fetch(`/api/clientes/${encodeURIComponent(clienteId)}`)
-      .then((r) => r.json())
-      .catch(() => null);
-    if (clienteRes?.cliente) actualizarEnLista(clienteRes.cliente);
   }
 
   function quitarDeLista(id: string) {
@@ -387,7 +403,7 @@ export default function ClientesPage() {
                           <p className="truncate text-sm font-medium text-foreground">{c.nombre}</p>
                           <p className="truncate text-xs text-muted">{c.email}</p>
                         </div>
-                        <EstadoOnboarding cliente={c} />
+                        <EstadoOnboarding cliente={c} enEsperaWa={clientesEsperandoWa.has(c.id)} />
                       </button>
                     </li>
                   ))}
@@ -435,7 +451,7 @@ export default function ClientesPage() {
                         </td>
                         <td className="truncate px-5 py-2.5 text-muted">{c.tipoMembresia || "—"}</td>
                         <td className="px-5 py-2.5">
-                          <EstadoOnboarding cliente={c} />
+                          <EstadoOnboarding cliente={c} enEsperaWa={clientesEsperandoWa.has(c.id)} />
                         </td>
                       </tr>
                     ))}
@@ -680,23 +696,27 @@ function CampoFecha({
 // Un vistazo a las 3 cosas que pasan al dar de alta a un cliente: acceso en
 // Kajabi (punto), invitación a Skool y mensaje de bienvenida (barritas
 // diagonales) — brillan en verde cuando ya se hicieron, gris cuando no.
-function EstadoOnboarding({ cliente }: { cliente: Cliente }) {
+function EstadoOnboarding({ cliente, enEsperaWa }: { cliente: Cliente; enEsperaWa: boolean }) {
   const pausado = !!cliente.pausadoEn;
   const kajabiActivo = cliente.accesoPlataforma?.trim().toLowerCase() === "si" && !pausado;
   const skoolOk = !!cliente.invitacionSkool;
   const bienvenidaOk = cliente.contactoWhats === "Enviado";
-  // Todavía no hay confirmación real de GHL, pero sí se le pidió el envío
-  // (tiene teléfono) — el foquito parpadea para dejar claro que está
-  // esperando, no que simplemente no aplica.
-  const esperandoBienvenida = !bienvenidaOk && cliente.contactoWhats === "Pendiente" && !!cliente.telefono;
+  const numeroInvalido = cliente.contactoWhats === "Número Inválido";
+  // Solo parpadea mientras la lista está preguntando de verdad (recién
+  // creado desde "Nuevo cliente", primeros ~90s) — no para siempre. Pasado
+  // ese tiempo sin confirmación, o si GHL confirmó que no se pudo entregar,
+  // se apaga en vez de quedar parpadeando indefinidamente.
+  const esperandoBienvenida = enEsperaWa && !bienvenidaOk && !numeroInvalido;
 
   const tituloKajabi = pausado ? "Kajabi: pausado" : kajabiActivo ? "Kajabi: acceso activo" : "Kajabi: sin acceso";
   const tituloSkool = skoolOk ? "Skool: invitación enviada" : "Skool: sin invitación";
-  const tituloBienvenida = bienvenidaOk
-    ? "Mensaje de bienvenida: enviado"
-    : esperandoBienvenida
-      ? "Mensaje de bienvenida: esperando confirmación de GHL…"
-      : "Mensaje de bienvenida: pendiente";
+  const tituloBienvenida = numeroInvalido
+    ? "Mensaje de bienvenida: número inválido"
+    : bienvenidaOk
+      ? "Mensaje de bienvenida: enviado"
+      : esperandoBienvenida
+        ? "Mensaje de bienvenida: esperando confirmación de GHL…"
+        : "Mensaje de bienvenida: pendiente / sin confirmar";
 
   return (
     <div
@@ -719,11 +739,13 @@ function EstadoOnboarding({ cliente }: { cliente: Cliente }) {
       />
       <span
         className={`h-4 w-1.5 flex-none -skew-x-12 rounded-full transition ${
-          bienvenidaOk
-            ? "animate-foco-encendido bg-success shadow-[0_0_6px_var(--color-success)]"
-            : esperandoBienvenida
-              ? "animate-foco-espera bg-success"
-              : "bg-silver"
+          numeroInvalido
+            ? "bg-danger shadow-[0_0_6px_var(--color-danger)]"
+            : bienvenidaOk
+              ? "animate-foco-encendido bg-success shadow-[0_0_6px_var(--color-success)]"
+              : esperandoBienvenida
+                ? "animate-foco-espera bg-success"
+                : "bg-silver"
         }`}
       />
     </div>
