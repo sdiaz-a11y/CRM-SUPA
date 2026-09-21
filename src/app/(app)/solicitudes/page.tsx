@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Check, ExternalLink, X } from "lucide-react";
 import { useSesion } from "@/lib/session-context";
 import { tienePermiso } from "@/lib/permisos";
-import type { EstadoSolicitud, SolicitudCliente } from "@/lib/types";
+import { esEventoLegendaria, type EstadoSolicitud, type SolicitudCliente } from "@/lib/types";
 import { FormularioSolicitudCliente } from "@/components/FormularioSolicitudCliente";
 
 type SolicitudConUrls = SolicitudCliente & { comprobantesUrl: string[] };
@@ -38,19 +38,24 @@ export default function SolicitudesPage() {
     cargar();
   }, [cargar]);
 
-  async function aprobar(id: string) {
-    if (!confirm("¿Aprobar esta solicitud? Se creará el cliente y se dispararán Kajabi, Skool y el WhatsApp de bienvenida."))
-      return;
-    setProcesando(id);
+  async function aprobar(s: SolicitudConUrls) {
+    const esLegendaria = esEventoLegendaria(s.evento);
+    const confirmacion = esLegendaria
+      ? "¿Aprobar esta solicitud? Es de Legendaria: no se crea cliente aquí, el socio se da de alta en el otro CRM (Certificaciones)."
+      : "¿Aprobar esta solicitud? Se creará el cliente y se dispararán Kajabi, Skool y el WhatsApp de bienvenida.";
+    if (!confirm(confirmacion)) return;
+    setProcesando(s.id);
     try {
-      const res = await fetch(`/api/solicitudes/${id}/aprobar`, { method: "POST" });
+      const res = await fetch(`/api/solicitudes/${s.id}/aprobar`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
         alert(data.error ?? "No se pudo aprobar la solicitud");
         return;
       }
-      const avisos = [data.avisoKajabi, data.avisoSkool, data.avisoGhl].filter(Boolean);
-      if (avisos.length) alert(`Cliente creado, pero hubo problemas:\n\n${avisos.join("\n")}`);
+      if (!data.legendaria) {
+        const avisos = [data.avisoKajabi, data.avisoSkool, data.avisoGhl].filter(Boolean);
+        if (avisos.length) alert(`Cliente creado, pero hubo problemas:\n\n${avisos.join("\n")}`);
+      }
       cargar();
     } finally {
       setProcesando(null);
@@ -139,12 +144,12 @@ export default function SolicitudesPage() {
 
                   <div className="flex gap-2">
                     <button
-                      onClick={() => aprobar(s.id)}
+                      onClick={() => aprobar(s)}
                       disabled={procesando === s.id}
                       className="ease-spring flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-success/15 px-3 py-1.5 text-xs font-medium text-success transition hover:bg-success/25 disabled:opacity-40"
                     >
                       <Check className="h-3.5 w-3.5" strokeWidth={1.75} />
-                      Aprobar y crear cliente
+                      {esEventoLegendaria(s.evento) ? "Aprobar (Legendaria)" : "Aprobar y crear cliente"}
                     </button>
                     <button
                       onClick={() => rechazar(s.id)}

@@ -178,6 +178,17 @@ export type EstadoMensajeBienvenidaWa = (typeof ESTADOS_MENSAJE_BIENVENIDA_WA)[n
 export const ESTADOS_SOLICITUD = ["pendiente", "aprobada", "rechazada"] as const;
 export type EstadoSolicitud = (typeof ESTADOS_SOLICITUD)[number];
 
+// Eventos de Legendaria: producto aparte, con su propio CRM ("Certificaciones"
+// / Legendar-IA), fuera de este sistema. Una Solicitud con uno de estos
+// eventos se aprueba sin crear Cliente aquí (ver
+// src/app/api/solicitudes/[id]/aprobar/route.ts) — el equipo da de alta al
+// socio manualmente en el otro CRM; aquí solo queda el registro de que la
+// solicitud fue revisada y aprobada.
+export const EVENTOS_LEGENDARIA = ["Legendar-IA MX", "Legendar-IA US", "Legendar-IA LATAM"] as const;
+export function esEventoLegendaria(evento: string | null): boolean {
+  return evento != null && (EVENTOS_LEGENDARIA as readonly string[]).includes(evento);
+}
+
 export type SolicitudCliente = {
   id: string;
   nombre: string;

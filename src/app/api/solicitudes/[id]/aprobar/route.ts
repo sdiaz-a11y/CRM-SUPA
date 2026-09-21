@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requerirPermiso } from "@/lib/auth";
 import { altaCompletaCliente } from "@/lib/alta-cliente";
 import { marcarSolicitudAprobada, obtenerSolicitud } from "@/lib/solicitudes";
+import { esEventoLegendaria } from "@/lib/types";
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const permiso = await requerirPermiso("revisarSolicitudes");
@@ -15,6 +16,14 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   }
 
   try {
+    // Legendaria vive en su propio CRM aparte ("Certificaciones") — aquí no
+    // se crea Cliente ni se dispara Kajabi/Skool/GHL, solo se marca la
+    // solicitud como aprobada para que el equipo dé de alta al socio allá.
+    if (esEventoLegendaria(solicitud.evento)) {
+      const actualizada = await marcarSolicitudAprobada(id, null, permiso.usuario.nombre);
+      return NextResponse.json({ solicitud: actualizada, legendaria: true });
+    }
+
     // correoAcceso es el identificador del cliente en el CRM/Kajabi/Skool;
     // correoPago queda solo como referencia en las notas, para conciliar el
     // pago si hace falta.

@@ -108,7 +108,7 @@ export async function obtenerSolicitud(id: string): Promise<SolicitudCliente | n
 
 export async function marcarSolicitudAprobada(
   id: string,
-  clienteId: string,
+  clienteId: string | null,
   revisadoPor: string
 ): Promise<SolicitudCliente> {
   const { data, error } = await supabase
