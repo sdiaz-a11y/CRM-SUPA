@@ -15,6 +15,7 @@
     "migrar-supabase": "tsx scripts/migrar-a-supabase.ts",
     "registrar-webhook-kajabi": "tsx scripts/registrar-webhook-kajabi.ts",
     "crear-admin": "tsx scripts/crear-admin.ts",
+    "crear-usuario-externo": "tsx scripts/crear-usuario-externo.ts",
     "backfill-kajabi-clientes": "tsx scripts/backfill-kajabi-clientes.ts",
     "setup-storage-comprobantes": "tsx scripts/setup-storage-comprobantes.ts"
   },

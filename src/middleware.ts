@@ -15,6 +15,9 @@ const PREFIJOS_PUBLICOS_API = [
   "/api/webhooks/hotmart",
   "/api/webhooks/ghl-bienvenida-wa",
   "/api/cron/sincronizar-kajabi",
+  // Formulario externo de VSL (ver FORMULARIO-SOLICITUDES-VSL.md) — se
+  // autentica con su propio ?token=, igual que los webhooks de arriba.
+  "/api/solicitudes-externas",
 ];
 
 export async function middleware(req: NextRequest) {

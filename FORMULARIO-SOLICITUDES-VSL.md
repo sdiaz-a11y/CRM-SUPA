@@ -163,11 +163,8 @@ Guarda esto como `formulario-vsl.html` y ábrelo en cualquier navegador para pro
 
 <script>
   // ── Configuración ─────────────────────────────────────────────────────
-  // URL a la que se manda el formulario. HOY NO EXISTE TODAVÍA — ver la
-  // sección 5 del .md ("Pendiente del lado del CRM"). Mientras tanto, este
-  // formulario funciona en "modo prueba": si el envío falla, muestra el
-  // payload armado en pantalla para verificar que los datos van bien.
-  const ENDPOINT_URL = "https://soporte.sinergeticos.com/api/solicitudes-externas?token=TOKEN_PENDIENTE";
+  // URL + token que les compartió Sinergéticos (ver sección 5 del .md).
+  const ENDPOINT_URL = "https://soporte.sinergeticos.com/api/solicitudes-externas?token=REEMPLAZAR_CON_EL_TOKEN";
 
   // ── Países (nombre + lada) ───────────────────────────────────────────
   const PAISES = [
@@ -312,14 +309,14 @@ Guarda esto como `formulario-vsl.html` y ábrelo en cualquier navegador para pro
 </html>
 ```
 
-## 5. Pendiente del lado del CRM (Sinergéticos) — no es tarea de VSL
+## 5. Endpoint — datos para VSL
 
-El endpoint actual (`POST /api/solicitudes`) solo acepta solicitudes de usuarios con sesión iniciada en este CRM — no está pensado para que un sistema externo le pegue directo. Para que este formulario funcione en producción falta, de nuestro lado:
+El endpoint público ya existe: `POST /api/solicitudes-externas`, protegido con un token fijo en la URL (mismo patrón que los webhooks de Kajabi/Hotmart de este CRM). Acepta exactamente los mismos campos que el formulario de arriba, restringido además a que `evento` sea uno de `VSL MX` / `VSL USA` / `VSL LATAM` (rechaza cualquier otro valor).
 
-1. Crear un endpoint público nuevo (ej. `/api/solicitudes-externas`), protegido con un token fijo en la URL — el mismo patrón que ya usan los webhooks de Kajabi/Hotmart en este CRM — que reciba exactamente estos mismos campos y cree la solicitud.
-2. Entregarle a VSL la URL final + el token, para reemplazar `ENDPOINT_URL` en el código de arriba.
+- **URL:** `https://soporte.sinergeticos.com/api/solicitudes-externas`
+- **Token:** se les entrega por separado (no va en este documento) — reemplazar `REEMPLAZAR_CON_EL_TOKEN` en el código de arriba por el valor real.
 
-Hasta que eso exista, el formulario sirve para que VSL empiece a capturar los datos ya en el formato correcto (y probar en consola que el payload sale bien armado), pero no va a poder enviarlos solo todavía.
+Con eso, `ENDPOINT_URL` en el código ya funciona en producción sin tocar nada más de este lado.
 
 ## 6. Qué evitar (causas conocidas de datos mal cargados)
 
